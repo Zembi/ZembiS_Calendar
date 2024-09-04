@@ -7,9 +7,11 @@ https://zembi.github.io/ZembiS_Calendar/Assets/JS/ZembiS_Calendar.js
 
 
 This is the core object (don't create this - already exists in the script you attach your code):
+```
 const calendarController = new ZembiS_Calendar();
-
+```
 and how you activate the calendar to your code:
+```
 // AVAILABLE OPTIONS CURRENTLY
 calendarController.renderDateInput({
     inputToAttach: '.yourSelector',
@@ -30,3 +32,4 @@ calendarController.renderDateInput({
         }
     }
 });
+```
