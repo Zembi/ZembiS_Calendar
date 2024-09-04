@@ -474,28 +474,3 @@ class ZembiS_Calendar {
 const calendarController = new ZembiS_Calendar();
 
 
-calendarController.renderDateInput({
-    inputToAttach: '.test1',
-    primaryColor: 'red',
-    startingMonthYear: new Date('2023-8-12'),
-    day: {
-        myClass: '',
-        clickable: true,
-        onClickDay: (date, target) => {
-            console.log(date);
-            // console.log(target);
-        },
-    }
-});
-
-calendarController.renderDateInput({
-    inputToAttach: '.test2',
-    primaryColor: 'red',
-    secondaryColor: 'red',
-    limits: {
-        clickable: false,
-        startFromDate: new Date('2024-8-12'),
-        untilDate: new Date('1992-10-2'),
-    },
-});
-
