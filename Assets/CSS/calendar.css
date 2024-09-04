@@ -1,0 +1,116 @@
+html,
+body {
+    width: 100%;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+}
+
+
+/*  */
+form {
+    width: 100%;
+    padding: 100px;
+}
+
+.input_calendar_vfz_outer_wrap {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: white;
+    border: 1px solid #ccc;
+    overflow: hidden;
+    padding: 10px;
+    z-index: 1000;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap {
+    position: relative;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_wrap {}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_title_outer_wrap {
+    display: flex;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_header_left_arrow_wrap,
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_header_right_arrow_wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 4px 3px;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_left_arrow .input_calendar_vfz_arrow_image {
+    transform: rotateY(180deg);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_left_arrow,
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_right_arrow {
+    cursor: pointer;
+    user-select: none;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_arrow_image {
+    width: 20px;
+    padding: 3px;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_title_wrap {
+    flex: 1 1;
+    display: flex;
+    flex-direction: column;
+    font-size: 22px;
+    text-align: center;
+    margin-bottom: 5px;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_title {
+    flex: 1 1;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_year_header_title {
+    flex: 1 1;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    border-top: 2px solid black;
+    border-bottom: 2px solid black;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day_header {
+    text-align: center;
+    font-weight: bold;
+    font-size: 20px;
+    padding: 2px;
+}
+
+/* BODY CALENDAR */
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day {
+    text-align: center;
+    font-size: 18px;
+    padding: 4px 2px;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day_clickable {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    user-select: none;
+}
