@@ -3,10 +3,10 @@
 
 class ZembiS_Calendar {
     // PRIVATE VARIABLES
-    #ccn = 'calendar_vfz';
-    #flagClassToAvoidDuplicates = 'vfzembiSCal@date_input_activated';
-    #downLimit = 1;
-    #upLimit = 1;
+    #ccn;
+    #flagClassToAvoidDuplicates;
+    #downLimit;
+    #upLimit;
 
     #months = [];
     #monthsForUse = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -15,13 +15,21 @@ class ZembiS_Calendar {
     #weekDaysForUse = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
     // HERE ADD THE CONFIGURATIONS OF EACH INPUT ACTION
+    #savedData;
     #configurations = [];
 
     static #isCssLoaded = false;
 
     constructor() {
-        this.savedData = [];
+        this.#ccn = 'calendar_vfz';
+        this.#flagClassToAvoidDuplicates = this.#generateUniqueIds(30, 'vfzembiSCal_');
+        this.#downLimit = 100;
+        this.#upLimit = 100;
+
+        this.#savedData = [];
         this.#ensureFirstTimeActions();
+
+        this.#setupEventDelegation();
     }
 
     #ensureFirstTimeActions() {
@@ -72,67 +80,72 @@ class ZembiS_Calendar {
 
 
     // --------------- RENDER FOR INPUT DATE ---------------
-    renderDateInput({ inputToAttach = null, startingMonthYear = new Date(), primaryColor = 'white', secondaryColor = 'grey', limits = null, day = null }) {
+    renderCalendar({ inputToAttach = null, startingMonthYear = new Date(), primaryColor = 'white', secondaryColor = 'grey', limits = null, day = null }) {
         // CORE PROPERTY
         const givenInput = this.#validateString(inputToAttach);
-        if (!givenInput) {
-            console.error('Invalid input element selector trying to be attached to ZembiS_Calendar');
-            return;
-        }
-
-        const today = new Date();
-        const hundredYearsBack = new Date(today.getFullYear() - this.#downLimit, today.getMonth(), today.getDate());
-        const hundredYearsForward = new Date(today.getFullYear() + this.#upLimit, today.getMonth(), today.getDate());
-
-        let startFromDate = this.#validateDate(limits?.startFromDate, hundredYearsBack);
-        let untilDate = this.#validateDate(limits?.untilDate, hundredYearsForward);
-
-        if (startFromDate < hundredYearsBack) {
-            startFromDate = hundredYearsBack;
-        }
-        if (untilDate > hundredYearsForward) {
-            untilDate = hundredYearsForward;
-        }
-
-        // IF INVALID USER LIMITS KEEP THE DEFAULT
-        if (startFromDate > untilDate) {
-            startFromDate = hundredYearsBack;
-            untilDate = hundredYearsForward;
-        }
-
-
-        // VALIDATE OPTIONS (IF NOT, INIATE DEFAULT VALUES)
-        const config = {
-            id: this.#generateUniqueIds(15),
-            inputToAttach: givenInput,
-            currentMonthYear: this.#validateDate(startingMonthYear),
-            primaryColor: this.#validateString(primaryColor, 'white'),
-            secondaryColor: this.#validateString(secondaryColor, 'grey'),
-            // OPTION LIMITS
-            limits: {
-                clickable: this.#validateBoolean(limits?.clickable, true),
-                startFromDate,
-                untilDate,
-            },
-            day: {
-                myClass: this.#validateString(day?.myClass, ''),
-                clickable: this.#validateBoolean(day?.clickable, false),
-                onClickDay: this.#validateFunction(day?.onClickDay),
+        try {
+            if (!givenInput) {
+                console.error('Invalid input element selector trying to be attached to ZembiS_Calendar');
+                return;
             }
+
+            const today = new Date();
+            const hundredYearsBack = new Date(today.getFullYear() - this.#downLimit, today.getMonth(), today.getDate());
+            const hundredYearsForward = new Date(today.getFullYear() + this.#upLimit, today.getMonth(), today.getDate());
+
+            let startFromDate = this.#validateDate(limits?.startFromDate, hundredYearsBack);
+            let untilDate = this.#validateDate(limits?.untilDate, hundredYearsForward);
+
+            if (startFromDate < hundredYearsBack) {
+                startFromDate = hundredYearsBack;
+            }
+            if (untilDate > hundredYearsForward) {
+                untilDate = hundredYearsForward;
+            }
+
+            // IF INVALID USER LIMITS KEEP THE DEFAULT
+            if (startFromDate > untilDate) {
+                startFromDate = hundredYearsBack;
+                untilDate = hundredYearsForward;
+            }
+
+
+            // VALIDATE OPTIONS (IF NOT, INIATE DEFAULT VALUES)
+            const config = {
+                id: this.#generateUniqueIds(25),
+                inputToAttach: givenInput,
+                currentMonthYear: this.#validateDate(startingMonthYear),
+                primaryColor: this.#validateString(primaryColor, 'white'),
+                secondaryColor: this.#validateString(secondaryColor, 'grey'),
+                // OPTION LIMITS
+                limits: {
+                    clickable: this.#validateBoolean(limits?.clickable, true),
+                    startFromDate,
+                    untilDate,
+                },
+                day: {
+                    myClass: this.#validateString(day?.myClass, ''),
+                    clickable: this.#validateBoolean(day?.clickable, false),
+                    onClickDay: this.#validateFunction(day?.onClickDay),
+                }
+            }
+
+            this.#savedData.push({ id: config.id, data: [] });
+            this.#configurations.push(config);
+
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                this.#activate(config);
+            }
+            else {
+                // DOCUMENT STILL LOADING SO USE EVENT LISTENER AS A LAST OPTION
+                document.addEventListener('DOMContentLoaded', () => this.#activate(config));
+            }
+
+            return this.#getSavedDataOfCurrentConfigId(config.id)[0];
         }
-
-        console.log(config);
-
-        this.savedData.push({ calendarId: config.id, data: [] });
-        this.#configurations.push(config);
-
-
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            this.#activate(config);
-        }
-        else {
-            // DOCUMENT STILL LOADING SO USE EVENT LISTENER AS A LAST OPTION
-            document.addEventListener('DOMContentLoaded', () => this.#activate(config));
+        catch (e) {
+            console.error(e);
+            return;
         }
     }
 
@@ -169,31 +182,12 @@ class ZembiS_Calendar {
         return false;
     }
 
-    #setupEventDelegation(config) {
-        const escapedId = CSS.escape(config.id);
-        const selector = `#${escapedId} .${this.#ccn}_month_body`;
-        console.log("Selector used for setupEventDelegation:", selector);
+    #generateUniqueIds(length, startingIdString = '') {
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+        let result = startingIdString + letters[Math.floor(Math.random() * letters.length)];
 
-        const calendarBody = document.querySelector(`#${config.id} .${this.#ccn}_month_body`);
-
-        if (calendarBody) {
-            calendarBody.addEventListener('click', (event) => {
-                const day = event.target.closest(`.${this.#ccn}_day_clickable`);
-                if (day && config.day.onClickDay) {
-                    event.preventDefault();
-                    config.day.onClickDay(day.getAttribute('data-date'), day);
-                }
-            });
-        }
-        else {
-            console.warn(`Element with selector '${selector}' not found.`);
-        }
-    }
-
-    #generateUniqueIds(length) {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        let result = '';
-        for (let i = 0; i < length; i++) {
+        for (let i = 1; i < length; i++) {
             const randomIndex = Math.floor(Math.random() * chars.length);
             result += chars[randomIndex];
         }
@@ -204,7 +198,7 @@ class ZembiS_Calendar {
     #activate(config) {
         // MAKE SURE TO CHECK IF INPUT IS READY FOR USE
         if (this.#validateIfInputIsAcceptable(config)) {
-            this.#createInputCalendar(config);
+            this.#createOrUpdateInputCalendar(config);
         }
     }
 
@@ -225,58 +219,66 @@ class ZembiS_Calendar {
             }
         });
 
-        // PREVENT HIDE CALENDAR IF CLICKING INSIDE IT (ITS ELEMENTS)
-        calendarWrap.addEventListener('click', (e) => e.stopPropagation());
+        // PREVENT HIDE CALENDAR IF CLICKING INSIDE IT (ITS ELEMENTS) **REMOVED BECAUSE THERE IS ONE LISTENER GENERALLY**
+        // calendarWrap.addEventListener('click', (e) => e.stopPropagation());
     }
 
-    #createInputCalendar(config) {
-        // MAKE SURE FIELD IS TYPE OF TEXT FIRST
+    // STARTING ACTIONS AFTER RENDER, TO BUILD THE STARTING CORE OF THE CALENDAR 
+    #createOrUpdateInputCalendar(config) {
+        this.#prepareInputField(config);
+        const outerWrap = this.#createOuterWrap(config);
+        this.#handleInputsBehaviorWithCalendarElement(config.inputToAttach, outerWrap);
+
+        const dateLimits = this.#getDateLimits(config);
+        config.currentMonthYear = this.#clampDate(config.currentMonthYear, dateLimits.minDate, dateLimits.maxDate);
+
+        const wrap = this.#createWrap(outerWrap);
+        this.#monthHeader(config, wrap);
+
+        const monthBody = this.#createMonthBody(wrap);
+        this.#eachMonthBody(config, monthBody);
+    }
+
+    #prepareInputField(config) {
         config.inputToAttach.type = "text";
         config.inputToAttach.readOnly = true;
+    }
 
+    #createOuterWrap(config) {
         const outerWrap = document.createElement('div');
         outerWrap.className = `input_${this.#ccn}_outer_wrap`;
         outerWrap.id = config.id;
         document.body.appendChild(outerWrap);
-
-        // ADD DATE FIELD AFTER INPUT
         config.inputToAttach.parentNode.insertBefore(outerWrap, config.inputToAttach.nextSibling);
+        return outerWrap;
+    }
 
-        // ADD THE EVENT OF SHOWING/HIDING THE CALENDAR
-        this.#handleInputsBehaviorWithCalendarElement(config.inputToAttach, outerWrap);
-
-        // CHECK ONCE BEFORE CREATING THAT THE LIMITS ARE BEING RESPECTED
+    #getDateLimits(config) {
         const today = new Date();
-
         const fromDate = new Date(today.getFullYear() - this.#downLimit, today.getMonth());
         const untilDate = new Date(today.getFullYear() + this.#upLimit, today.getMonth());
+        return {
+            minDate: config.limits.startFromDate || fromDate,
+            maxDate: config.limits.untilDate || untilDate
+        };
+    }
 
-        let minDate = config.limits.startFromDate || fromDate;
-        let maxDate = config.limits.untilDate || untilDate;
-
-        if (config.limits.startFromDate && config.limits.untilDate) {
-            if (config.limits.startFromDate > config.limits.untilDate) {
-                minDate = fromDate;
-                maxDate = untilDate;
-            }
-        }
-
-        config.currentMonthYear = this.#clampDate(config.currentMonthYear, minDate, maxDate);
-
-
-        // CONTINUE WITH THE CALENDAR'S STRUCTURE
+    #createWrap(outerWrap) {
         const wrap = document.createElement('div');
         wrap.className = `input_${this.#ccn}_wrap`;
         outerWrap.appendChild(wrap);
+        return wrap;
+    }
 
-        this.#monthHeader(config, wrap);
-
+    #createMonthBody(wrap) {
         const monthBody = document.createElement('div');
         monthBody.className = `${this.#ccn}_month_body`;
         wrap.appendChild(monthBody);
-        this.#eachMonthBody(config, monthBody);
+        return monthBody;
     }
 
+
+    // HANDLES THE FUNCTIONALITY OF THE CALENDAR'S HEADER
     #addNavigationButtons(config, parentLeftArrow, parentRightArrow) {
         const leftArrow = document.createElement('a');
         leftArrow.className = `input_${this.#ccn}_left_arrow`;
@@ -296,6 +298,7 @@ class ZembiS_Calendar {
         rightArrow.addEventListener('click', () => this.#navigateMonth(config, 1));
     }
 
+    // TRIGGERS WHEN USER CLICKS ARROWS TO GO TO THE NEXT OR THE PREVIOUS MONTH
     #navigateMonth(config, direction) {
         const currentDate = config.currentMonthYear;
         const newMonth = currentDate.getMonth() + direction;
@@ -309,11 +312,12 @@ class ZembiS_Calendar {
                 config.limits.untilDate ? new Date(config.limits.untilDate.getFullYear(), config.limits.untilDate.getMonth()) : potentialNewDate
             );
             config.currentMonthYear = clampedDate;
-        } else {
+        }
+        else {
             config.currentMonthYear = potentialNewDate;
         }
 
-        this.#removeDayEventListeners(config);
+        this.#removeDayEventListener(config);
 
         const calendarElement = document.getElementById(config.id);
         const monthBody = calendarElement.querySelector(`.${this.#ccn}_month_body`);
@@ -325,7 +329,7 @@ class ZembiS_Calendar {
         if (header) {
             header.innerHTML = `
                 <div class="${this.#ccn}_month_header_title">
-                    <span>${this.#monthsForUse[config.currentMonthYear.getMonth()]}</span>
+                    <span>${this.#months[config.currentMonthYear.getMonth()]}</span>
                 </div>
                 <div class="${this.#ccn}_year_header_title">
                     <span>${config.currentMonthYear.getFullYear()}</span>
@@ -333,16 +337,14 @@ class ZembiS_Calendar {
             `;
         }
     }
-    #removeDayEventListeners(config) {
-        const days = document.querySelectorAll(`#${config.id} .${this.#ccn}_day_clickable`);
+    #removeDayEventListener(config) {
+        const calendarBody = document.querySelector(`#${config.id} .${this.#ccn}_month_body`);
 
-        days.forEach(day => {
-            // REMOVE ALL EVENT LISTENERS
-            const newDay = day.cloneNode(true);
-            day.parentNode.replaceChild(newDay, day);
-        });
-
-        this.#setupEventDelegation(config);
+        if (calendarBody) {
+            // REMOVE PREVIOUSLY calendarBody ENTIRELY (AND ITS ATTACHED LISTENERS), THE RE-RENDER THE MONTH
+            calendarBody.innerHTML = '';
+            calendarBody.dataset.listenerAdded = "";
+        }
     }
 
     #returnMonthYear(month, year) {
@@ -356,7 +358,7 @@ class ZembiS_Calendar {
         wrap.className = `${this.#ccn}_month_header_wrap`;
         parentEl.appendChild(wrap);
 
-        let month = this.#monthsForUse[config.currentMonthYear.getMonth()];
+        let month = this.#months[config.currentMonthYear.getMonth()];
         let year = config.currentMonthYear.getFullYear();
 
         wrap.innerHTML += `
@@ -378,6 +380,11 @@ class ZembiS_Calendar {
         this.#staticWeekDaysHeaderOfMonth(wrap);
     }
 
+    #removeGreekTones(text) {
+        const normalizedText = text.normalize("NFD");
+        return normalizedText.replace(/[\u0300-\u036f]/g, "");
+    }
+
     #staticWeekDaysHeaderOfMonth(parentEl) {
         const monthHeader = document.createElement('div');
         monthHeader.className = `${this.#ccn}_month_header`;
@@ -385,51 +392,55 @@ class ZembiS_Calendar {
 
         let htmlForMonthHeader = '';
         for (let weekDay = 0; weekDay < 7; weekDay++) {
+            let weekDaysDisplayed = this.#weekDays[weekDay].substring(0, 2);
+            weekDaysDisplayed = this.#removeGreekTones(weekDaysDisplayed);
+
             htmlForMonthHeader += `
                 <div class="${this.#ccn}_day_header">
-                    ${this.#weekDays[weekDay].substring(0, 2)}
+                    ${weekDaysDisplayed}
                 </div>`;
         }
         monthHeader.innerHTML = htmlForMonthHeader;
     }
 
+    #getCustomDayClasses(config) {
+        let customClass = '';
+        let classes = config.day.myClass.split(' ');
+        classes.forEach((eachClass) => {
+            if (eachClass !== '') {
+                customClass += ` ${eachClass}`;
+            }
+        });
+        return customClass;
+    }
+
     #eachMonthBody(config, parentEl) {
-        let currentMonthYear = config.currentMonthYear, clickable = config.day.clickable;
-        let month = currentMonthYear.getMonth(), year = currentMonthYear.getFullYear();
+        let month = config.currentMonthYear.getMonth(), year = config.currentMonthYear.getFullYear();
 
         // const currentDay = this.#getCurrentDay();
         const countDays = this.#getNumOfDaysInMonth(month, year);
 
         let htmlForMonthBody = this.#startDaysOfMonthFromCorrectWeekDay(this.#getFirstDayOfMonth(month, year));
-        for (let day = 1; day <= countDays; day++) {
-            let data = day;
 
-            if (clickable) {
+        const customClasses = this.#getCustomDayClasses(config);
+
+        for (let day = 1; day <= countDays; day++) {
+            let data = `
+                <div class="${this.#ccn}_day${customClasses}" data-day="${day}">
+                    ${day}
+                </div>`;
+
+            if (config.day.clickable) {
                 data = `
-                    <a class="${this.#ccn}_day_clickable" data-date="${year}-${month}-${day}" aria-label="${day} ${this.#monthsForUse[month]} ${year}" aria-checked="false">
+                    <div class="${this.#ccn}_day_clickable${customClasses}" data-day="${day}" data-date="${year}-${month}-${day}" aria-label="${day} ${this.#monthsForUse[month]} ${year}" aria-checked="false">
                         ${day}
-                    </a>`;
+                    </div>`;
             }
 
-            let customClass = '';
-            let classes = config.day.myClass.split(' ');
-            classes.forEach((eachClass) => {
-                if (eachClass !== '') {
-                    customClass += ` ${eachClass}`;
-                }
-            });
-
-            htmlForMonthBody += `
-                <div class="${this.#ccn}_day${customClass}" data-day="${day}">
-                    ${data}
-                </div>`;
+            htmlForMonthBody += data;
         }
 
         parentEl.innerHTML = htmlForMonthBody;
-
-        if (clickable) {
-            this.#addEventsToDays(config);
-        }
     }
 
     #getCurrentDay(d, m, y) {
@@ -452,21 +463,118 @@ class ZembiS_Calendar {
         return html;
     }
 
+    // THIS IS IMPORTANT TO ENSURE THAT NO DUPLICATE LISTENERS WILL BE ADDED
+    #setupEventDelegation(config = null) {
+        document.addEventListener('click', (event) => {
+            this.#handlerClickDay(event, config);
+        });
+    }
+    #getConfigForDay(clickedEl) {
+        const calendarId = clickedEl.closest(`.input_${this.#ccn}_outer_wrap`).id;
+        return this.#configurations.find(cfg => cfg.id === calendarId);
+    }
+    #getConfigById(id) {
+        return this.#configurations.find(cfg => cfg.id === id);
+    }
 
-    #addEventsToDays(config) {
-        while (!document.getElementById(`${config.id}`)) {
-            const days = document.querySelectorAll(`#${config.id} .${this.#ccn}_day_clickable`);
+    #handlerClickDay(event, config = null) {
+        const clickedEl = event.target.closest(`.${this.#ccn}_day_clickable`);
 
-            days.forEach(day => {
-                day.addEventListener('click', (event) => {
-                    event.preventDefault();
+        if (!clickedEl) return;
 
-                    if (config.day.onClickDay) {
-                        config.day.onClickDay(day.getAttribute('data-date'), day);
-                    }
-                });
-            });
+        const pickedNumDay = clickedEl.getAttribute('data-day');
+        if (pickedNumDay && parseInt(pickedNumDay, 10) !== -1) {
+            config = config ? config : this.#getConfigForDay(clickedEl);
+            // HERE ADD THE CUSTOM EVENT LISTENER
+            if (config.day.onClickDay) {
+                config.day.onClickDay(clickedEl.getAttribute('data-date'), clickedEl);
+            }
         }
+    }
+
+
+    #getSavedDataOfCurrentConfigId(id) {
+        return this.#savedData.filter((dataObj) => dataObj.id === id);
+    }
+
+
+
+    modifyCalendar({ id = null, startingMonthYear = null, primaryColor = null, secondaryColor = null, limits = null, day = null }) {
+        // CHECK IF ID EXISTS IN this.#configurations ARRAY
+        const givenId = this.#validateString(id);
+        try {
+            if (!givenId) {
+                console.error('Invalid ID trying to be modified!');
+                return;
+            }
+
+            const config = this.#getConfigById(givenId);
+            if (!config) {
+                console.error(`No calendar found with ID '${givenId}'`);
+                return;
+            }
+
+            const today = new Date();
+            const hundredYearsBack = new Date(today.getFullYear() - this.#downLimit, today.getMonth(), today.getDate());
+            const hundredYearsForward = new Date(today.getFullYear() + this.#upLimit, today.getMonth(), today.getDate());
+
+            // VALIDATE NEW VALUES OR KEEP THE EXISTING ONES IF INVALID
+            let startFromDate = this.#validateDate(limits?.startFromDate, config.limits.startFromDate);
+            let untilDate = this.#validateDate(limits?.untilDate, config.limits.untilDate);
+
+            // ENSURE LIMITS ARE WITHIN BOUNDS
+            startFromDate = this.#clampDate(startFromDate, hundredYearsBack, hundredYearsForward);
+            untilDate = this.#clampDate(untilDate, hundredYearsBack, hundredYearsForward);
+
+            // AVOID StartFromDate BEING AFTER untilDate
+            if (startFromDate > untilDate) {
+                startFromDate = config.limits.startFromDate;
+                untilDate = config.limits.untilDate;
+            }
+
+            // VALIDATE NEW VALUES OR KEEP THE EXISTING ONES IF INVALID
+            const updatedLimits = limits ? {
+                clickable: this.#validateBoolean(limits?.clickable, config.limits.clickable),
+                startFromDate: this.#validateDate(limits?.startFromDate, config.limits.startFromDate),
+                untilDate: this.#validateDate(limits?.untilDate, config.limits.untilDate),
+            } : config.limits;
+
+            // UPDATE CONFIGURATION WITH NEW VALUES
+            config.currentMonthYear = this.#validateDate(startingMonthYear, config.currentMonthYear);
+            config.primaryColor = this.#validateString(primaryColor, config.primaryColor);
+            config.secondaryColor = this.#validateString(secondaryColor, config.secondaryColor);
+            config.limits = updatedLimits;
+            config.day = {
+                myClass: this.#validateString(day?.myClass, config.day.myClass),
+                clickable: this.#validateBoolean(day?.clickable, config.day.clickable),
+                onClickDay: this.#validateFunction(day?.onClickDay, config.day.onClickDay),
+            };
+
+            // RE-RENDER THE CALENDAR WITH UPDATED CONFIGURATION
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                this.#update(config);
+            }
+            else {
+                // DOCUMENT STILL LOADING SO USE EVENT LISTENER AS A LAST OPTION
+                document.addEventListener('DOMContentLoaded', () => this.#update(config));
+            }
+
+            return this.#getSavedDataOfCurrentConfigId(givenId);
+        }
+        catch (e) {
+            console.error(e);
+            return;
+        }
+    }
+
+    #update(config) {
+        // FIND AND REMOVE OLD ELEMENTS
+        const calendarElement = document.getElementById(config.id);
+        if (calendarElement) {
+            calendarElement.remove();
+        }
+
+        this.#createOrUpdateInputCalendar(config);
     }
 }
 
