@@ -9,7 +9,7 @@
 <ul>
     <li><strong>Optimization</strong>: Uses only one event listener for all days, improving performance.</li>
     <li><strong>New Feature</strong>: You can now modify an existing calendar with the modifyCalendar method.</li>
-<ul>
+</ul>
 
 <strong>Example: Optimized Event Listener</strong>
 In this version, the code has been optimized to use a single event listener for all days, instead of attaching a listener to each day individually.
