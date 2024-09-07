@@ -5,8 +5,6 @@
 ## Version History
 
 <br>
-<hr>
-<br>
 
 ### v1.1 - Optimized wtih new features
 <ul>
@@ -64,7 +62,6 @@ calendarController.modifyCalendar({
 });
 ```
 
-<br>
 <hr>
 <br>
 
@@ -123,10 +120,11 @@ const myCalendar = calendarController.renderCalendar({
 ```
 
 <hr>
+<br>
 
 ## Future Updates
 
 Stay tuned for more updates and optimizations in future versions!
 
 <hr>
-
+<br>
