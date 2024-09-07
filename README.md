@@ -1,6 +1,6 @@
 # Custom Calendar (Under development)
 
-## ⚠️ BE AWARE! THERE WILL BE A LOT OF UPDATES TO THIS CODE (ADDITIONS AND OPTIMIZATIONS)
+## ⚠️ Be aware! There will be a lot of updates to this code (Additions and Optimizations)
 
 ## Version History
 
