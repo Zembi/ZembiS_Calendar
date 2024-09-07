@@ -12,10 +12,13 @@
 </ul>
 
 <strong>Example: Optimized Event Listener</strong>
+
 In this version, the code has been optimized to use a single event listener for all days, instead of attaching a listener to each day individually.
 
 <strong>Example: Modifying an Existing Calendar</strong>
+
 To modify a previously rendered calendar, use the modifyCalendar method like this:
+
 ```
 calendarController.modifyCalendar({
     // ID OF THE CALENDAR YOU WANT TO MODIFY
@@ -44,6 +47,7 @@ calendarController.modifyCalendar({
     }
 });
 ```
+
 <hr>
 
 ### v1.0 - Initialization of Calendar
@@ -51,17 +55,25 @@ calendarController.modifyCalendar({
 The initial release of the custom calendar.
 
 #### How to Include
+
 Add the following script tag to your HTML (preferably in the head section):
+
 ```
 <script src="https://zembi.github.io/ZembiS_Calendar/Assets/JS/ZembiS_Calendar.js"></script>
 ```
+
 #### Core Object
+
 The core object is automatically included with the script, so you don’t need to create it:
+
 ```
 const calendarController = new ZembiS_Calendar();
 ```
+
 #### How to Render the Calendar
+
 To render the calendar, use the following method:
+
 ```
 // AVAILABLE OPTIONS CURRENTLY
 calendarController.renderCalendar({
@@ -95,6 +107,7 @@ calendarController.renderCalendar({
 <hr>
 
 ## Future Updates
+
 Stay tuned for more updates and optimizations in future versions!
 
 <hr>
