@@ -15,13 +15,26 @@
 
 In this version, the code has been optimized to use a single event listener for all days, instead of attaching a listener to each day individually.
 
+<strong>Example: Render returns a value now</strong>
+
+After this version, the property renderCalendar, returns an object with the basic info about of the new calendar.
+
+```
+const myCalendar = calendarController.renderCalendar({
+    ...
+});
+
+console.log(myCalendar) // {id, data} (data will be taken advantage of in a future version, so you can access the data, stored in this calendar)
+
+```
+
 <strong>Example: Modifying an Existing Calendar</strong>
 
-To modify a previously rendered calendar, use the modifyCalendar method like this:
+To modify a previously rendered calendar, now you can utilize the id that the renderCalendar() property returns (mentioned above). Use the modifyCalendar method like this:
 
 ```
 calendarController.modifyCalendar({
-    // ID OF THE CALENDAR YOU WANT TO MODIFY
+    // ID OF THE CALENDAR YOU WANT TO MODIFY - GET IT FROM THE renderCalendar PROPERTY IN INITIALIZATION
     id: 'yourCalendarId',
 
     // NEW STARTING MONTH/YEAR
@@ -76,7 +89,7 @@ To render the calendar, use the following method:
 
 ```
 // AVAILABLE OPTIONS CURRENTLY
-calendarController.renderCalendar({
+const myCalendar = calendarController.renderCalendar({
     inputToAttach: '.yourSelector',
 
     // MAKE SURE IT IS BETWEEN THE LIMITS - OTHERWISE DEFAULT IS TODAY
