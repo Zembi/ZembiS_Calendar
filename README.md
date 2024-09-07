@@ -4,8 +4,11 @@
 
 ## Version History
 
-### v1.1 - Optimized wtih new features
+<br>
 <hr>
+<br>
+
+### v1.1 - Optimized wtih new features
 <ul>
     <li><strong>Optimization</strong>: Uses only one event listener for all days, improving performance.</li>
     <li><strong>New Feature</strong>: You can now modify an existing calendar with the modifyCalendar method.</li>
@@ -61,7 +64,9 @@ calendarController.modifyCalendar({
 });
 ```
 
+<br>
 <hr>
+<br>
 
 ### v1.0 - Initialization of Calendar
 
