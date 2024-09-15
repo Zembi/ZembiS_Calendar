@@ -14,6 +14,19 @@ class ZembiS_Calendar {
     #weekDays = [];
     #weekDaysForUse = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+    #underDev = false;
+
+    // DOMCONTENTLOAD CHECKER SO AS TO AVOID MULTIPLE LISTENERS 
+    static #domReadyPromise = new Promise(resolve => {
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            resolve();
+        }
+        else {
+            document.addEventListener('DOMContentLoaded', resolve);
+        }
+    });
+
+
     // HERE ADD THE CONFIGURATIONS OF EACH INPUT ACTION
     #savedData;
     #configurations = [];
@@ -33,20 +46,13 @@ class ZembiS_Calendar {
     }
 
     #ensureFirstTimeActions() {
-        const action = () => this.#firstTimeActions();
-
-        // USE THIS PRIVATE STATIC VARIABLE THAT WILL BE USED TO AVOID MULTIPLE DOMContentLoaded EVENTS TO RUN AND SO TO REDUCE THE AMOUNT OF EVENT CALLS
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            action();
-        }
-        else {
-            // DOCUMENT STILL LOADING SO USE EVENT LISTENER AS A LAST OPTION
-            document.addEventListener('DOMContentLoaded', action);
-        };
+        ZembiS_Calendar.#domReadyPromise.then(() => this.#firstTimeActions());
     }
 
     #firstTimeActions() {
-        this.#includeCssFile('./Assets/CSS/calendar.css', 'zembiS_Stylesheet_vW3#Dwdw12@##s');
+        let path = this.#underDev ? './Assets/CSS/calendar.css' : 'https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css';
+
+        this.#includeCssFile(path, 'zembiS_Stylesheet_vW3#Dwdw12@##s');
         this.#languageConfiguration();
     }
 
@@ -80,9 +86,16 @@ class ZembiS_Calendar {
 
 
     // --------------- RENDER FOR INPUT DATE ---------------
-    renderCalendar({ inputToAttach = null, startingMonthYear = new Date(), primaryColor = 'white', secondaryColor = 'grey', limits = null, day = null }) {
+    renderCalendar({ inputToAttach = null, inputPlaceholder = 'Pick a date', startingMonthYear = new Date(), primaryColor = 'white', secondaryColor = 'grey', limits = null, day = null }) {
         // CORE PROPERTY
         const givenInput = this.#validateString(inputToAttach);
+
+        // PREVENT INPUT TO BE ATTACHED TO TWO A CALENDAR
+        const existingConfig = this.#configurations.find(c => c.inputToAttach === givenInput);
+        if (existingConfig) {
+            console.error('This input is already attached to a calendar. Detach it before rendering a new one.');
+            return existingConfig;
+        }
         try {
             if (!givenInput) {
                 console.error('Invalid input element selector trying to be attached to ZembiS_Calendar');
@@ -114,6 +127,7 @@ class ZembiS_Calendar {
             const config = {
                 id: this.#generateUniqueIds(25),
                 inputToAttach: givenInput,
+                inputPlaceholder: this.#validateString(inputPlaceholder, 'Pick a date'),
                 currentMonthYear: this.#validateDate(startingMonthYear),
                 primaryColor: this.#validateString(primaryColor, 'white'),
                 secondaryColor: this.#validateString(secondaryColor, 'grey'),
@@ -126,6 +140,7 @@ class ZembiS_Calendar {
                 day: {
                     myClass: this.#validateString(day?.myClass, ''),
                     clickable: this.#validateBoolean(day?.clickable, false),
+                    reClickable: this.#validateBoolean(day?.reClickable, false),
                     onClickDay: this.#validateFunction(day?.onClickDay),
                 }
             }
@@ -133,13 +148,7 @@ class ZembiS_Calendar {
             this.#savedData.push({ id: config.id, data: [] });
             this.#configurations.push(config);
 
-            if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                this.#activate(config);
-            }
-            else {
-                // DOCUMENT STILL LOADING SO USE EVENT LISTENER AS A LAST OPTION
-                document.addEventListener('DOMContentLoaded', () => this.#activate(config));
-            }
+            ZembiS_Calendar.#domReadyPromise.then(() => this.#activate(config));
 
             return this.#getSavedDataOfCurrentConfigId(config.id)[0];
         }
@@ -202,11 +211,16 @@ class ZembiS_Calendar {
         }
     }
 
-    #handleInputsBehaviorWithCalendarElement(targetInput, calendarWrap) {
-        // DISPLAY FIELD ON FOCUS AND HIDE IT IF NEEDED - OPTIMIZED CODE AI
-        document.addEventListener('click', (e) => {
-            const isTargetInput = e.target === targetInput;
-            const isInsideCalendar = calendarWrap.contains(e.target);
+    #handleInputsBehaviorWithCalendarElement(config, calendarWrap) {
+        const targetInput = config.inputToAttach;
+
+        if (!config.functionsHandler) {
+            config.functionsHandler = {};
+        }
+
+        config.functionsHandler._calendarClickHandler = (event) => {
+            const isTargetInput = event.target === targetInput;
+            const isInsideCalendar = calendarWrap.contains(event.target);
 
             if (isTargetInput) {
                 calendarWrap.style.display = 'block';
@@ -217,17 +231,32 @@ class ZembiS_Calendar {
             else if (!isInsideCalendar) {
                 calendarWrap.style.display = 'none';
             }
-        });
+        };
 
-        // PREVENT HIDE CALENDAR IF CLICKING INSIDE IT (ITS ELEMENTS) **REMOVED BECAUSE THERE IS ONE LISTENER GENERALLY**
+        // DISPLAY FIELD ON FOCUS AND HIDE IT IF NEEDED - OPTIMIZED CODE AI
+        document.addEventListener('click', config.functionsHandler._calendarClickHandler);
+
+        // PREVENT HIDE CALENDAR IF CLICKING INSIDE IT (ITS ELEMENTS) **REMOVED BECAUSE THERE IS ONE LISTENER GENERALLY AND IT WAS IN CONFLICT**
         // calendarWrap.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    #removePreviousCalendarEventListeners(config) {
+        if (config.functionsHandler) {
+            if (config.functionsHandler._calendarClickHandler) {
+                document.removeEventListener('click', config.functionsHandler._calendarClickHandler);
+                config.functionsHandler._calendarClickHandler = null;
+            }
+        }
     }
 
     // STARTING ACTIONS AFTER RENDER, TO BUILD THE STARTING CORE OF THE CALENDAR 
     #createOrUpdateInputCalendar(config) {
         this.#prepareInputField(config);
         const outerWrap = this.#createOuterWrap(config);
-        this.#handleInputsBehaviorWithCalendarElement(config.inputToAttach, outerWrap);
+
+        this.#removePreviousCalendarEventListeners(config);
+
+        this.#handleInputsBehaviorWithCalendarElement(config, outerWrap);
 
         const dateLimits = this.#getDateLimits(config);
         config.currentMonthYear = this.#clampDate(config.currentMonthYear, dateLimits.minDate, dateLimits.maxDate);
@@ -242,6 +271,7 @@ class ZembiS_Calendar {
     #prepareInputField(config) {
         config.inputToAttach.type = "text";
         config.inputToAttach.readOnly = true;
+        config.inputToAttach.placeholder = config.inputPlaceholder;
     }
 
     #createOuterWrap(config) {
@@ -249,7 +279,7 @@ class ZembiS_Calendar {
         outerWrap.className = `input_${this.#ccn}_outer_wrap`;
         outerWrap.id = config.id;
         document.body.appendChild(outerWrap);
-        config.inputToAttach.parentNode.insertBefore(outerWrap, config.inputToAttach.nextSibling);
+        document.body.append(outerWrap);
         return outerWrap;
     }
 
@@ -281,21 +311,18 @@ class ZembiS_Calendar {
     // HANDLES THE FUNCTIONALITY OF THE CALENDAR'S HEADER
     #addNavigationButtons(config, parentLeftArrow, parentRightArrow) {
         const leftArrow = document.createElement('a');
-        leftArrow.className = `input_${this.#ccn}_left_arrow`;
+        leftArrow.className = `input_${this.#ccn}_nav_arrow input_${this.#ccn}_left_arrow`;
         leftArrow.id = `calendar_${config.id}_left_arrow`;
-        leftArrow.innerHTML = `<img src="./Assets/Images/arrow.png" class="input_${this.#ccn}_arrow_image"/>`;
+        leftArrow.name = 'left_arrow';
+        leftArrow.innerHTML = `<img src="./Assets/Images/arrow.png" class="input_${this.#ccn}_arrow_image" alt="left_arrow"/>`;
         parentLeftArrow.appendChild(leftArrow);
 
         const rightArrow = document.createElement('a');
-        rightArrow.className = `input_${this.#ccn}_right_arrow`;
+        rightArrow.className = `input_${this.#ccn}_nav_arrow input_${this.#ccn}_right_arrow`;
         rightArrow.id = `calendar_${config.id}_right_arrow`;
-        rightArrow.innerHTML = `<img src="./Assets/Images/arrow.png" class="input_${this.#ccn}_arrow_image"/>`;
+        rightArrow.name = 'right_arrow';
+        rightArrow.innerHTML = `<img src="./Assets/Images/arrow.png" class="input_${this.#ccn}_arrow_image" alt="right_arrow"/>`;
         parentRightArrow.appendChild(rightArrow);
-
-
-        // EVENT LISTENERS FOR NAVIGATING MONTHS
-        leftArrow.addEventListener('click', () => this.#navigateMonth(config, -1));
-        rightArrow.addEventListener('click', () => this.#navigateMonth(config, 1));
     }
 
     // TRIGGERS WHEN USER CLICKS ARROWS TO GO TO THE NEXT OR THE PREVIOUS MONTH
@@ -327,14 +354,10 @@ class ZembiS_Calendar {
             this.#eachMonthBody(config, monthBody);
         }
         if (header) {
-            header.innerHTML = `
-                <div class="${this.#ccn}_month_header_title">
-                    <span>${this.#months[config.currentMonthYear.getMonth()]}</span>
-                </div>
-                <div class="${this.#ccn}_year_header_title">
-                    <span>${config.currentMonthYear.getFullYear()}</span>
-                </div>
-            `;
+            const month = this.#months[config.currentMonthYear.getMonth()];
+            const year = config.currentMonthYear.getFullYear();
+
+            header.innerHTML = this.#returnMonthYear(month, year);
         }
     }
     #removeDayEventListener(config) {
@@ -349,8 +372,11 @@ class ZembiS_Calendar {
 
     #returnMonthYear(month, year) {
         return `
-            <div class="${this.#ccn}_month_header_title">${month}</div>
-            <div class="${this.#ccn}_year_header_title">${year}</div>`;
+            <div class="${this.#ccn}_month_header_title">
+                <span aria-label="${month} ${year}">${month}</span>
+            </div>
+            <span class="${this.#ccn}_year_header_title" aria-label="Year input" data-min="${year - this.#downLimit}" data-max="${year + this.#upLimit}">${year}</span>
+        `;
     }
 
     #monthHeader(config, parentEl) {
@@ -375,6 +401,17 @@ class ZembiS_Calendar {
             let leftArrowParent = document.getElementById(`calendar_${config.id}_left_arrow_parent`);
             let rightArrowParent = document.getElementById(`${config.id}_navigation_right_arrow`);
             this.#addNavigationButtons(config, leftArrowParent, rightArrowParent);
+
+
+            // HANDLE YEAR NUMBER
+            const yearInput = wrap.querySelector(`.${this.#ccn}_year_header_title`);
+            yearInput.addEventListener('change', () => {
+                const newYear = parseInt(yearInput.value, 10);
+                if (!isNaN(newYear)) {
+                    config.currentMonthYear.setFullYear(newYear);
+                    this.#createOrUpdateInputCalendar(config);
+                }
+            });
         }
 
         this.#staticWeekDaysHeaderOfMonth(wrap);
@@ -392,13 +429,14 @@ class ZembiS_Calendar {
 
         let htmlForMonthHeader = '';
         for (let weekDay = 0; weekDay < 7; weekDay++) {
-            let weekDaysDisplayed = this.#weekDays[weekDay].substring(0, 2);
+            let weekDayStr = this.#weekDays[weekDay];
+            let weekDaysDisplayed = weekDayStr.substring(0, 2);
             weekDaysDisplayed = this.#removeGreekTones(weekDaysDisplayed);
 
             htmlForMonthHeader += `
-                <div class="${this.#ccn}_day_header">
+                <span class="${this.#ccn}_day_header" aria-label="${weekDayStr}">
                     ${weekDaysDisplayed}
-                </div>`;
+                </span>`;
         }
         monthHeader.innerHTML = htmlForMonthHeader;
     }
@@ -415,29 +453,40 @@ class ZembiS_Calendar {
     }
 
     #eachMonthBody(config, parentEl) {
-        let month = config.currentMonthYear.getMonth(), year = config.currentMonthYear.getFullYear();
+        let month = (config.currentMonthYear.getMonth() + 1), year = config.currentMonthYear.getFullYear();
 
-        // const currentDay = this.#getCurrentDay();
         const countDays = this.#getNumOfDaysInMonth(month, year);
 
         let htmlForMonthBody = this.#startDaysOfMonthFromCorrectWeekDay(this.#getFirstDayOfMonth(month, year));
 
-        const customClasses = this.#getCustomDayClasses(config);
+        let customClasses = this.#getCustomDayClasses(config);
 
+        config.daysHandler = {};
+        config.daysHandler.previousDay = null;
         for (let day = 1; day <= countDays; day++) {
-            let data = `
-                <div class="${this.#ccn}_day${customClasses}" data-day="${day}">
-                    ${day}
-                </div>`;
+            config.daysHandler.currentDay = day;
 
-            if (config.day.clickable) {
-                data = `
-                    <div class="${this.#ccn}_day_clickable${customClasses}" data-day="${day}" data-date="${year}-${month}-${day}" aria-label="${day} ${this.#monthsForUse[month]} ${year}" aria-checked="false">
-                        ${day}
-                    </div>`;
+            const currentMonthCheck = this.#compareTwoDates(new Date(`${year}-${month}-${day}`), new Date());
+            let currentDayClass = '';
+            if (currentMonthCheck) {
+                currentDayClass += ' current_day';
             }
 
-            htmlForMonthBody += data;
+            let data = '';
+            let clickableClassData = '';
+            let restData = '';
+
+            if (config.day.clickable) {
+                clickableClassData = '_clickable';
+                restData = `aria-checked="false"`;
+            }
+
+            data = `class="${this.#ccn}_day${clickableClassData}${customClasses}${currentDayClass}" data-day="${day}" data-date="${year}-${month}-${day}" aria-label="${day} ${this.#monthsForUse[month]} ${year}" ${restData}`;
+
+            htmlForMonthBody += `
+            <span ${data} >
+            ${day}
+                </span> `;
         }
 
         parentEl.innerHTML = htmlForMonthBody;
@@ -458,38 +507,96 @@ class ZembiS_Calendar {
     #startDaysOfMonthFromCorrectWeekDay(firstDayOfMonth) {
         let html = '';
         for (let day = 0; day < firstDayOfMonth; day++) {
-            html += `<div class="${this.#ccn}_day" data-day="-1"></div>`;
+            html += `<span class="${this.#ccn}_day" data-day="-1"></span> `;
         }
         return html;
     }
 
+    #compareTwoDates(date1, date2) {
+        return date1.getFullYear() === date2.getFullYear() &&
+            date1.getMonth() === date2.getMonth() &&
+            date1.getDate() === date2.getDate();
+    }
+
     // THIS IS IMPORTANT TO ENSURE THAT NO DUPLICATE LISTENERS WILL BE ADDED
-    #setupEventDelegation(config = null) {
+    #setupEventDelegation() {
         document.addEventListener('click', (event) => {
-            this.#handlerClickDay(event, config);
+            const clickedEl = event.target.closest(`.input_${this.#ccn}_outer_wrap`);
+            if (!clickedEl) return;
+
+            // EVENT LISTENERS FOR NAVIGATING MONTHS
+            this.#handlerClickArrowsNav(clickedEl, event);
+            // EVENT LISTENERS FOR SELECTING DAYS
+            this.#handlerClickDay(event);
         });
     }
-    #getConfigForDay(clickedEl) {
+    #getConfigFromClickedEl(clickedEl) {
         const calendarId = clickedEl.closest(`.input_${this.#ccn}_outer_wrap`).id;
-        return this.#configurations.find(cfg => cfg.id === calendarId);
+        return this.#getConfigById(calendarId);
     }
     #getConfigById(id) {
         return this.#configurations.find(cfg => cfg.id === id);
     }
 
-    #handlerClickDay(event, config = null) {
-        const clickedEl = event.target.closest(`.${this.#ccn}_day_clickable`);
+    #handlerClickArrowsNav(clickedEl, event) {
+        const clickedAnArrow = event.target.closest(`.input_${this.#ccn}_nav_arrow`);
+        if (!clickedAnArrow) return;
 
+        const config = this.#getConfigById(clickedEl?.id);
+
+        let navDirection = -1;
+        if (clickedAnArrow.name === 'right_arrow') {
+            navDirection = 1;
+        }
+
+        this.#navigateMonth(config, navDirection);
+    }
+
+    #handlerClickDay(event) {
+        const clickedEl = event.target.closest(`.${this.#ccn}_day_clickable`);
         if (!clickedEl) return;
 
         const pickedNumDay = clickedEl.getAttribute('data-day');
+
         if (pickedNumDay && parseInt(pickedNumDay, 10) !== -1) {
-            config = config ? config : this.#getConfigForDay(clickedEl);
-            // HERE ADD THE CUSTOM EVENT LISTENER
-            if (config.day.onClickDay) {
-                config.day.onClickDay(clickedEl.getAttribute('data-date'), clickedEl);
+            const config = this.#getConfigFromClickedEl(clickedEl);
+
+            if (config.daysHandler.currentDay !== clickedEl.getAttribute('data-day')) {
+                // CORE FUNCTIONALITY
+                this.#onClickDayAction(clickedEl, config);
+            }
+            else {
+                if (config.day.reClickable) {
+                    // CORE FUNCTIONALITY
+                    this.#onClickDayAction(clickedEl, config);
+                }
             }
         }
+    }
+
+    #onClickDayAction(clickedEl, config) {
+        this.#clickDayCoreFunctionality(clickedEl, config);
+
+        // HERE ADD THE CUSTOM EVENT LISTENER FROM THE USER
+        if (config.day.onClickDay) {
+            config.day.onClickDay(clickedEl.getAttribute('data-date'), clickedEl);
+        }
+    }
+
+    #clickDayCoreFunctionality(clickedEl, config) {
+        config.inputToAttach.value = clickedEl.getAttribute('data-date');
+        this.#configureActiveDay(clickedEl, config);
+    }
+
+    #configureActiveDay(clickedEl, config) {
+        config.daysHandler.previousDay = config.daysHandler.currentDay;
+        const previousClickedEl = document.querySelector(`#${config.id} [data-day="${config.daysHandler.previousDay}"].${this.#ccn}_day_clickable`);
+        previousClickedEl.classList.remove('active');
+        previousClickedEl.setAttribute('aria-checked', 'false');
+
+        config.daysHandler.currentDay = clickedEl.getAttribute('data-day');
+        clickedEl.classList.add('active');
+        clickedEl.setAttribute('aria-checked', 'true');
     }
 
 
@@ -551,13 +658,7 @@ class ZembiS_Calendar {
             };
 
             // RE-RENDER THE CALENDAR WITH UPDATED CONFIGURATION
-            if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                this.#update(config);
-            }
-            else {
-                // DOCUMENT STILL LOADING SO USE EVENT LISTENER AS A LAST OPTION
-                document.addEventListener('DOMContentLoaded', () => this.#update(config));
-            }
+            ZembiS_Calendar.#domReadyPromise.then(() => this.#update(config));
 
             return this.#getSavedDataOfCurrentConfigId(givenId);
         }

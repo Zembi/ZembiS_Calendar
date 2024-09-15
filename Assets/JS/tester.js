@@ -4,14 +4,16 @@
 
 const dateId1 = calendarController.renderCalendar({
     inputToAttach: '.test1',
+    inputPlaceholder: 'Date Time',
     primaryColor: 'red',
     startingMonthYear: new Date('2023-8-12'),
     day: {
         myClass: '',
         clickable: true,
+        reClickable: false,
         onClickDay: (date, target) => {
-            console.log(date);
-            console.log(target);
+            // console.log(date);
+            // console.log(target);
         },
     }
 });
@@ -36,3 +38,14 @@ calendarController.modifyCalendar({
         clickable: true
     }
 });
+
+
+// calendarController.modifyCalendar({
+//     id: dateId2.id,
+//     limits: {
+//         clickable: true,
+//     },
+//     day: {
+//         clickable: true
+//     }
+// });
