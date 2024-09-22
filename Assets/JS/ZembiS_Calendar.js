@@ -22,7 +22,7 @@ class ZembiS_Calendar {
 
     // DOMCONTENTLOAD CHECKER SO AS TO AVOID MULTIPLE LISTENERS 
     static #domReadyPromise = new Promise(resolve => {
-        const underDev = true;
+        const underDev = false;
 
         if (!underDev) {
             const href = 'https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css';
@@ -57,8 +57,6 @@ class ZembiS_Calendar {
     // HERE ADD THE CONFIGURATIONS OF EACH INPUT ACTION
     #savedData;
     #configurations = [];
-
-    static #underDev = true;
 
     constructor() {
         this.#ccn = 'calendar_vfz';
