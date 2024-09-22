@@ -1,10 +1,18 @@
 # Custom Calendar (Under development)
 
+## ADD TO YOUR HEADER THIS SCRIPTS
+```
+<link rel="stylesheet" href="https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css">
+<script src="https://zembi.github.io/ZembiS_Calendar/Assets/JS/ZembiS_Calendar.js"></script>
+```
+
 ## ⚠️ Be aware! There will be a lot of updates to this code (Additions and Optimizations)
 
 <br>
 
-## Version History
+### v1.2 - Optimized wtih new features
+
+A LOT OF NEW ADDITIONS - STAY TUNED FOR GUIDE (choose format of date, include css link on your own to improve loading errors and etc)
 
 <br>
 

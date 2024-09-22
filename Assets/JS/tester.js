@@ -1,11 +1,11 @@
 
 
 
+// window.addEventListener('load', () => {
 const dateId1 = calendarController.renderCalendar({
     inputToAttach: '.test1',
     inputPlaceholder: 'Date Time',
-    dateFormat: 'yy-dd-mm',
-    primaryColor: 'red',
+    // dateFormat: 'yy-dd-mm',
     startingMonthYear: new Date('2023-8-12'),
     day: {
         myClass: '',
@@ -27,8 +27,6 @@ const dateId1 = calendarController.renderCalendar({
 
 const dateId2 = calendarController.renderCalendar({
     inputToAttach: '.test2',
-    primaryColor: 'red',
-    secondaryColor: 'red',
     clickable: false,
     limits: {
         clickable: false,
@@ -39,3 +37,4 @@ const dateId2 = calendarController.renderCalendar({
         clickable: false
     }
 });
+// });

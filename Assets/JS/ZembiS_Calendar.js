@@ -20,10 +20,28 @@ class ZembiS_Calendar {
     #weekDays = [];
     #weekDaysForUse = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    #underDev = false;
-
     // DOMCONTENTLOAD CHECKER SO AS TO AVOID MULTIPLE LISTENERS 
     static #domReadyPromise = new Promise(resolve => {
+        const underDev = true;
+
+        if (!underDev) {
+            const href = 'https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css';
+            const id = 'zembiS_Stylesheet_vW3#Dwdw12@##s';
+
+            const linkElements = document.getElementsByTagName('link');
+            let isCssLoaded = false;
+            for (let i = 0; i < linkElements.length; i++) {
+                if (linkElements[i].rel === 'stylesheet' && linkElements[i].href === href) {
+                    linkElements[i].id = id;
+                    isCssLoaded = true;
+                }
+            }
+            if (!isCssLoaded) {
+                console.warn(`The needed css file for the ZembiS_Calendar script, is not included in your code.\nAdd to the head of your page, before the js script the following:\n<link rel="stylesheet" href="https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css">`);
+                return;
+            }
+        }
+
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
             resolve();
         }
@@ -40,7 +58,7 @@ class ZembiS_Calendar {
     #savedData;
     #configurations = [];
 
-    static #isCssLoaded = false;
+    static #underDev = true;
 
     constructor() {
         this.#ccn = 'calendar_vfz';
@@ -51,8 +69,6 @@ class ZembiS_Calendar {
         this.#mouseMoveEventsDelegation = '';
         this.#savedData = [];
         this.#ensureFirstTimeActions();
-
-        this.#setupEventDelegation();
     }
 
     #ensureFirstTimeActions() {
@@ -60,22 +76,8 @@ class ZembiS_Calendar {
     }
 
     #firstTimeActions() {
-        let path = this.#underDev ? './Assets/CSS/calendar.css' : 'https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css';
-
-        this.#includeCssFile(path, 'zembiS_Stylesheet_vW3#Dwdw12@##s');
         this.#languageConfiguration();
-    }
-
-    #includeCssFile(urlOfFile, id) {
-        if (!document.getElementById(id) && !ZembiS_Calendar.#isCssLoaded) {
-            const style = document.createElement('link');
-            style.rel = 'stylesheet';
-            style.id = id;
-            style.href = urlOfFile;
-            document.head.appendChild(style);
-
-            ZembiS_Calendar.#isCssLoaded = true;
-        }
+        this.#setupEventDelegation();
     }
 
     #languageConfiguration() {
@@ -96,7 +98,7 @@ class ZembiS_Calendar {
 
 
     // --------------- RENDER FOR INPUT DATE ---------------
-    renderCalendar({ inputToAttach = null, inputPlaceholder = 'Pick a date', startingMonthYear = new Date(), dateFormat = 'DD-MM-YYYY', primaryColor = 'white', secondaryColor = 'grey', limits = null, day = null, animate = null, cursorEffect = true }) {
+    renderCalendar({ inputToAttach = null, inputPlaceholder = 'Pick a date', startingMonthYear = new Date(), dateFormat = 'DD-MM-YYYY', css = null, limits = null, day = null, animate = null, cursorEffect = true }) {
         // CORE PROPERTY
         const givenInput = this.#validateString(inputToAttach);
 
@@ -140,8 +142,6 @@ class ZembiS_Calendar {
                 inputPlaceholder: this.#validateString(inputPlaceholder, 'Pick a date'),
                 currentMonthYear: this.#validateDate(startingMonthYear),
                 dateFormat: this.#validateDateFormat(dateFormat.toUpperCase(), 'DD-MM-YYYY'),
-                primaryColor: this.#validateString(primaryColor, 'white'),
-                secondaryColor: this.#validateString(secondaryColor, 'grey'),
                 cursorEffect: this.#validateBoolean(cursorEffect, true),
                 // OPTION LIMITS
                 limits: {
@@ -570,7 +570,7 @@ class ZembiS_Calendar {
             const currentMonthCheck = this.#compareTwoDates(new Date(`${year}-${month}-${day}`), new Date());
             let currentDayClass = '';
             if (currentMonthCheck) {
-                currentDayClass += ' current_day';
+                currentDayClass += ` ${this.#ccn}_current_day`;
             }
 
             let data = '';
@@ -841,7 +841,7 @@ class ZembiS_Calendar {
 
 
 
-    modifyCalendar({ id = null, startingMonthYear = null, dateFormat = null, primaryColor = null, secondaryColor = null, limits = null, day = null, animate = null }) {
+    modifyCalendar({ id = null, startingMonthYear = null, dateFormat = null, style = null, limits = null, day = null, animate = null }) {
         // CHECK IF ID EXISTS IN this.#configurations ARRAY
         const givenId = this.#validateString(id);
         try {
@@ -884,8 +884,6 @@ class ZembiS_Calendar {
             // UPDATE CONFIGURATION WITH NEW VALUES
             config.currentMonthYear = this.#validateDate(startingMonthYear, config.currentMonthYear);
             config.dateFormat = this.#validateDateFormat(dateFormat.toUpperCase(), config.dateFormat);
-            config.primaryColor = this.#validateString(primaryColor, config.primaryColor);
-            config.secondaryColor = this.#validateString(secondaryColor, config.secondaryColor);
             // NO UPDATE FOR CURSOR AS IT IS IMPORTANT TO INITIATE THE FUNCTIONALITY SO AS TO DECIDE IF WE WILL LOAD THE MOUSE EVENT LISTENER
             config.limits = updatedLimits;
             config.day = {
