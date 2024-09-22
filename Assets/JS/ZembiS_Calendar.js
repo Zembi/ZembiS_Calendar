@@ -20,7 +20,7 @@ class ZembiS_Calendar {
     #weekDays = [];
     #weekDaysForUse = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    #underDev = true;
+    #underDev = false;
 
     // DOMCONTENTLOAD CHECKER SO AS TO AVOID MULTIPLE LISTENERS 
     static #domReadyPromise = new Promise(resolve => {
