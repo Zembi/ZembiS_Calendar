@@ -1,7 +1,6 @@
 
 
 
-
 const dateId1 = calendarController.renderCalendar({
     inputToAttach: '.test1',
     inputPlaceholder: 'Date Time',
@@ -12,7 +11,7 @@ const dateId1 = calendarController.renderCalendar({
         myClass: '',
         reClickable: false,
         onClickDay: (date, target) => {
-            console.log(date);
+            // console.log(date);
             // console.log(target);
         },
     },

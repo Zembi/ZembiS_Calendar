@@ -399,7 +399,6 @@ class ZembiS_Calendar {
         }
 
         if (config.cursorEffect) {
-            console.log(config);
             this.#addCursorFollowInYear(config, yearsContainer);
         }
 
