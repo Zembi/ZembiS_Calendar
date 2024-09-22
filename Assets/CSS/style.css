@@ -1,0 +1,15 @@
+html,
+body {
+    width: 100%;
+    background-color: black;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+}
+
+
+/*  */
+form {
+    width: 100%;
+    padding: 100px;
+}

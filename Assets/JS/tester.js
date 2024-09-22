@@ -5,47 +5,38 @@
 const dateId1 = calendarController.renderCalendar({
     inputToAttach: '.test1',
     inputPlaceholder: 'Date Time',
+    dateFormat: 'yy-dd-mm',
     primaryColor: 'red',
     startingMonthYear: new Date('2023-8-12'),
     day: {
         myClass: '',
-        clickable: true,
         reClickable: false,
         onClickDay: (date, target) => {
-            // console.log(date);
+            console.log(date);
             // console.log(target);
         },
-    }
+    },
+    limits: {
+        clickable: true,
+    },
+    animate: {
+        fadeDatePicker: 300,
+        fadeYearPicker: 400,
+        cursorEffectDelay: 100
+    },
 });
 
 const dateId2 = calendarController.renderCalendar({
     inputToAttach: '.test2',
     primaryColor: 'red',
     secondaryColor: 'red',
+    clickable: false,
     limits: {
         clickable: false,
         startFromDate: new Date('2024-8-12'),
         untilDate: new Date('1992-10-2'),
     },
-});
-
-calendarController.modifyCalendar({
-    id: dateId2.id,
-    limits: {
-        clickable: true,
-    },
     day: {
-        clickable: true
+        clickable: false
     }
 });
-
-
-// calendarController.modifyCalendar({
-//     id: dateId2.id,
-//     limits: {
-//         clickable: true,
-//     },
-//     day: {
-//         clickable: true
-//     }
-// });

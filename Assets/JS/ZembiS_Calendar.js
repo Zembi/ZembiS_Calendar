@@ -7,6 +7,12 @@ class ZembiS_Calendar {
     #flagClassToAvoidDuplicates;
     #downLimit;
     #upLimit;
+    #acceptedFormats = [
+        'DD-MM-YYYY', 'MM-DD-YYYY', 'YYYY-MM-DD', 'YYYY-DD-MM',
+        'DD-MM-YY', 'MM-DD-YY', 'YY-MM-DD', 'YY-DD-MM',
+        'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY/MM/DD', 'YYYY/DD/MM',
+        'DD/MM/YY', 'MM/DD/YY', 'YY/MM/DD', 'YY/DD/MM',
+    ];
 
     #months = [];
     #monthsForUse = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -14,7 +20,7 @@ class ZembiS_Calendar {
     #weekDays = [];
     #weekDaysForUse = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    #underDev = false;
+    #underDev = true;
 
     // DOMCONTENTLOAD CHECKER SO AS TO AVOID MULTIPLE LISTENERS 
     static #domReadyPromise = new Promise(resolve => {
@@ -26,6 +32,9 @@ class ZembiS_Calendar {
         }
     });
 
+    // IMPORTANT TO REMOVE MOUSE EVENT LISTENER IF THERE IS NO CURSOR
+    #mouseMoveEventsDelegation;
+    #mousemoveListenerAdded = false;
 
     // HERE ADD THE CONFIGURATIONS OF EACH INPUT ACTION
     #savedData;
@@ -39,6 +48,7 @@ class ZembiS_Calendar {
         this.#downLimit = 100;
         this.#upLimit = 100;
 
+        this.#mouseMoveEventsDelegation = '';
         this.#savedData = [];
         this.#ensureFirstTimeActions();
 
@@ -86,7 +96,7 @@ class ZembiS_Calendar {
 
 
     // --------------- RENDER FOR INPUT DATE ---------------
-    renderCalendar({ inputToAttach = null, inputPlaceholder = 'Pick a date', startingMonthYear = new Date(), primaryColor = 'white', secondaryColor = 'grey', limits = null, day = null }) {
+    renderCalendar({ inputToAttach = null, inputPlaceholder = 'Pick a date', startingMonthYear = new Date(), dateFormat = 'DD-MM-YYYY', primaryColor = 'white', secondaryColor = 'grey', limits = null, day = null, animate = null, cursorEffect = true }) {
         // CORE PROPERTY
         const givenInput = this.#validateString(inputToAttach);
 
@@ -129,8 +139,10 @@ class ZembiS_Calendar {
                 inputToAttach: givenInput,
                 inputPlaceholder: this.#validateString(inputPlaceholder, 'Pick a date'),
                 currentMonthYear: this.#validateDate(startingMonthYear),
+                dateFormat: this.#validateDateFormat(dateFormat.toUpperCase(), 'DD-MM-YYYY'),
                 primaryColor: this.#validateString(primaryColor, 'white'),
                 secondaryColor: this.#validateString(secondaryColor, 'grey'),
+                cursorEffect: this.#validateBoolean(cursorEffect, true),
                 // OPTION LIMITS
                 limits: {
                     clickable: this.#validateBoolean(limits?.clickable, true),
@@ -139,10 +151,15 @@ class ZembiS_Calendar {
                 },
                 day: {
                     myClass: this.#validateString(day?.myClass, ''),
-                    clickable: this.#validateBoolean(day?.clickable, false),
+                    clickable: this.#validateBoolean(day?.clickable, true),
                     reClickable: this.#validateBoolean(day?.reClickable, false),
                     onClickDay: this.#validateFunction(day?.onClickDay),
-                }
+                },
+                animate: {
+                    fadeDatePicker: this.#validateInteger(animate?.fadeDatePicker, 0),
+                    fadeYearPicker: this.#validateInteger(animate?.fadeYearPicker, 0),
+                    cursorEffectDelay: this.#validateInteger(animate?.cursorEffectDelay, 0),
+                },
             }
 
             this.#savedData.push({ id: config.id, data: [] });
@@ -158,6 +175,10 @@ class ZembiS_Calendar {
         }
     }
 
+    #ifFirefox() {
+        return typeof InstallTrigger !== 'undefined';
+    }
+
     // VALIDATOR FUNCTIONS
     #validateDate(date, defaultDate = new Date()) {
         return !isNaN(date?.getTime()) ? date : defaultDate;
@@ -171,8 +192,26 @@ class ZembiS_Calendar {
     #validateBoolean(boolean, ifNotValid = false) {
         return typeof boolean === 'boolean' ? boolean : ifNotValid;
     }
+    #validateInteger(integer, ifNotValid = null) {
+        return Number.isInteger(integer) ? integer : ifNotValid;
+    }
     #validateFunction(funct) {
         return typeof funct === "function" ? funct : null;
+    }
+    #validateDateFormat(givenFormat, defaultFormat = 'DD-MM-YYYY') {
+        return this.#acceptedFormats.includes(givenFormat) ? givenFormat : defaultFormat;
+    }
+    #formatDate(config, day, month, year) {
+        const dd = String(day).padStart(2, '0');
+        const mm = String(month).padStart(2, '0');
+        const yyyy = String(year);
+        const yy = yyyy.slice(-2);
+
+        return config.dateFormat
+            .replace('DD', dd)
+            .replace('MM', mm)
+            .replace('YYYY', yyyy)
+            .replace('YY', yy);
     }
 
     #validateIfInputIsAcceptable(config) {
@@ -223,13 +262,13 @@ class ZembiS_Calendar {
             const isInsideCalendar = calendarWrap.contains(event.target);
 
             if (isTargetInput) {
-                calendarWrap.style.display = 'block';
+                calendarWrap.classList.remove(`${this.#ccn}_close_status`);
                 const rect = targetInput.getBoundingClientRect();
                 calendarWrap.style.top = `${rect.bottom + window.scrollY}px`;
                 calendarWrap.style.left = `${rect.left + window.scrollX}px`;
             }
             else if (!isInsideCalendar) {
-                calendarWrap.style.display = 'none';
+                calendarWrap.classList.add(`${this.#ccn}_close_status`);
             }
         };
 
@@ -266,6 +305,12 @@ class ZembiS_Calendar {
 
         const monthBody = this.#createMonthBody(wrap);
         this.#eachMonthBody(config, monthBody);
+
+        // IF YEARS WRAP DOESN'T EXIST
+        const yearsWrap = this.#createYearsWrap(config, outerWrap);
+        const minYear = config.limits.startFromDate.getFullYear();
+        const maxYear = config.limits.untilDate.getFullYear();
+        this.#createAllYearChoices(config, minYear, maxYear, yearsWrap);
     }
 
     #prepareInputField(config) {
@@ -276,11 +321,23 @@ class ZembiS_Calendar {
 
     #createOuterWrap(config) {
         const outerWrap = document.createElement('div');
-        outerWrap.className = `input_${this.#ccn}_outer_wrap`;
+        outerWrap.className = `input_${this.#ccn}_outer_wrap ${this.#ccn}_close_status`;
         outerWrap.id = config.id;
+        outerWrap.style.transition = `opacity ${config.animate.fadeDatePicker}ms`;
         document.body.appendChild(outerWrap);
         document.body.append(outerWrap);
         return outerWrap;
+    }
+
+    #addCursorFollowInYear(config, yearsContainer) {
+        const cursor = document.createElement('span');
+        cursor.className = `${this.#ccn}_cursor_to_follow`;
+        cursor.style.transition = `
+            top ${config.animate.cursorEffectDelay}ms, 
+            left ${config.animate.cursorEffectDelay}ms, 
+            opacity 0.1s
+        `;
+        yearsContainer.appendChild(cursor);
     }
 
     #getDateLimits(config) {
@@ -294,10 +351,59 @@ class ZembiS_Calendar {
     }
 
     #createWrap(outerWrap) {
+        const innerCalendar = document.createElement('div');
+        innerCalendar.className = `input_${this.#ccn}_inner_calendar`;
+        outerWrap.appendChild(innerCalendar);
+
         const wrap = document.createElement('div');
         wrap.className = `input_${this.#ccn}_wrap`;
-        outerWrap.appendChild(wrap);
+        innerCalendar.appendChild(wrap);
         return wrap;
+    }
+
+    #createYearsWrap(config, outerWrap) {
+        const yearsWrap = document.createElement('div');
+        yearsWrap.className = `${this.#ccn}_years_wrap ${this.#ccn}_close_status`;
+        yearsWrap.style.transition = `
+            opacity ${config.animate.fadeYearPicker}ms, 
+            visibility ${config.animate.fadeYearPicker}ms, 
+            transform ${config.animate.fadeYearPicker}ms
+        `;
+
+        outerWrap.appendChild(yearsWrap);
+
+        ZembiS_Calendar.#domReadyPromise.then(() => {
+            if (this.#ifFirefox() && yearsWrap) {
+                yearsWrap.classList.add('firefox-scroll');
+            }
+        });
+
+        return yearsWrap;
+    }
+
+    #createAllYearChoices(config, min, max, yearsWrap) {
+        const yearsContainer = document.createElement('div');
+        yearsContainer.className = `${this.#ccn}_years_container`;
+
+        for (let year = min; year <= max; year++) {
+            const yearElement = document.createElement('span');
+            let activeClass = '';
+            if (config.currentMonthYear.getFullYear() === year) {
+                activeClass = ` ${this.#ccn}_active_year`;
+            }
+            yearElement.className = `${this.#ccn}_year${activeClass}`;
+            yearElement.textContent = year;
+            yearElement.setAttribute('data-year', year);
+
+            yearsContainer.appendChild(yearElement);
+        }
+
+        if (config.cursorEffect) {
+            console.log(config);
+            this.#addCursorFollowInYear(config, yearsContainer);
+        }
+
+        yearsWrap.appendChild(yearsContainer);
     }
 
     #createMonthBody(wrap) {
@@ -306,7 +412,6 @@ class ZembiS_Calendar {
         wrap.appendChild(monthBody);
         return monthBody;
     }
-
 
     // HANDLES THE FUNCTIONALITY OF THE CALENDAR'S HEADER
     #addNavigationButtons(config, parentLeftArrow, parentRightArrow) {
@@ -357,9 +462,10 @@ class ZembiS_Calendar {
             const month = this.#months[config.currentMonthYear.getMonth()];
             const year = config.currentMonthYear.getFullYear();
 
-            header.innerHTML = this.#returnMonthYear(month, year);
+            header.innerHTML = this.#returnMonthYear(config, month, year);
         }
     }
+
     #removeDayEventListener(config) {
         const calendarBody = document.querySelector(`#${config.id} .${this.#ccn}_month_body`);
 
@@ -370,12 +476,19 @@ class ZembiS_Calendar {
         }
     }
 
-    #returnMonthYear(month, year) {
+    #returnMonthYear(config, month, year) {
+        let clickable = '';
+        if (config.limits.clickable) {
+            clickable = '_clickable';
+        }
+
         return `
             <div class="${this.#ccn}_month_header_title">
                 <span aria-label="${month} ${year}">${month}</span>
             </div>
-            <span class="${this.#ccn}_year_header_title" aria-label="Year input" data-min="${year - this.#downLimit}" data-max="${year + this.#upLimit}">${year}</span>
+            <div class="${this.#ccn}_year_header_title_wrap">
+                <span class="${this.#ccn}_year_header_title${clickable}" id="calendar_${config.id}_year" aria-label="Year input" data-min="${year - this.#downLimit}" data-max="${year + this.#upLimit}">${year}</span>
+            </div>
         `;
     }
 
@@ -391,7 +504,7 @@ class ZembiS_Calendar {
             <div class="${this.#ccn}_month_header_title_outer_wrap">
                 <div id="calendar_${config.id}_left_arrow_parent" class="${this.#ccn}_header_left_arrow_wrap"></div>
                 <div class="${this.#ccn}_month_header_title_wrap">
-                    ${this.#returnMonthYear(month, year)}
+                    ${this.#returnMonthYear(config, month, year)}
                 </div>
                 <div id="${config.id}_navigation_right_arrow" class="${this.#ccn}_header_right_arrow_wrap"></div>
             </div>
@@ -401,17 +514,6 @@ class ZembiS_Calendar {
             let leftArrowParent = document.getElementById(`calendar_${config.id}_left_arrow_parent`);
             let rightArrowParent = document.getElementById(`${config.id}_navigation_right_arrow`);
             this.#addNavigationButtons(config, leftArrowParent, rightArrowParent);
-
-
-            // HANDLE YEAR NUMBER
-            const yearInput = wrap.querySelector(`.${this.#ccn}_year_header_title`);
-            yearInput.addEventListener('change', () => {
-                const newYear = parseInt(yearInput.value, 10);
-                if (!isNaN(newYear)) {
-                    config.currentMonthYear.setFullYear(newYear);
-                    this.#createOrUpdateInputCalendar(config);
-                }
-            });
         }
 
         this.#staticWeekDaysHeaderOfMonth(wrap);
@@ -481,7 +583,8 @@ class ZembiS_Calendar {
                 restData = `aria-checked="false"`;
             }
 
-            data = `class="${this.#ccn}_day${clickableClassData}${customClasses}${currentDayClass}" data-day="${day}" data-date="${year}-${month}-${day}" aria-label="${day} ${this.#monthsForUse[month]} ${year}" ${restData}`;
+            const formattedDate = this.#formatDate(config, day, month, year);
+            data = `class="${this.#ccn}_day${clickableClassData}${customClasses}${currentDayClass}" data-day="${day}" data-date="${formattedDate}" aria-label="${day} ${this.#monthsForUse[month - 1]} ${year}" ${restData}`;
 
             htmlForMonthBody += `
             <span ${data} >
@@ -521,15 +624,53 @@ class ZembiS_Calendar {
     // THIS IS IMPORTANT TO ENSURE THAT NO DUPLICATE LISTENERS WILL BE ADDED
     #setupEventDelegation() {
         document.addEventListener('click', (event) => {
-            const clickedEl = event.target.closest(`.input_${this.#ccn}_outer_wrap`);
-            if (!clickedEl) return;
+            this.#clickEventsDelegation(event);
+        });
 
-            // EVENT LISTENERS FOR NAVIGATING MONTHS
-            this.#handlerClickArrowsNav(clickedEl, event);
-            // EVENT LISTENERS FOR SELECTING DAYS
-            this.#handlerClickDay(event);
+        ZembiS_Calendar.#domReadyPromise.then(() => {
+            const observer = new MutationObserver(() => {
+                const cursorEl = document.querySelector(`.input_${this.#ccn}_outer_wrap .${this.#ccn}_cursor_to_follow`);
+                if (cursorEl) {
+                    if (!this.#mousemoveListenerAdded) {
+                        this.#mouseMoveEventsDelegation = (event) => {
+                            this.#handleMouseMove(event);
+                        };
+                        document.addEventListener('mousemove', this.#mouseMoveEventsDelegation);
+                        this.#mousemoveListenerAdded = true;
+                    }
+                    observer.disconnect();
+                }
+            });
+
+            observer.observe(document.body, { childList: true, subtree: true });
         });
     }
+    #clickEventsDelegation(event) {
+        const clickedEl = event.target.closest(`.input_${this.#ccn}_outer_wrap`);
+        if (!clickedEl) return;
+
+        // EVENT LISTENERS FOR NAVIGATING MONTHS
+        this.#handlerClickArrowsNav(clickedEl, event);
+        // EVENT LISTENERS FOR NAVIGATING TO YEARS
+        this.#handlerClickYearToNav(clickedEl, event);
+        // EVENT LISTENERS FOR CHOSING YEARS
+        this.#handlerClickYear(clickedEl, event);
+        // EVENT LISTENERS FOR SELECTING DAYS
+        this.#handlerClickDay(event);
+    }
+    #handleMouseMove(event) {
+        const cursorEl = document.querySelector(`.input_${this.#ccn}_outer_wrap .${this.#ccn}_cursor_to_follow`);
+        if (!cursorEl) {
+            document.removeEventListener('mousemove', this.#mouseMoveEventsDelegation);
+            return;
+        }
+
+        const hoveredPicker = event.target.closest(`.input_${this.#ccn}_outer_wrap`);
+        if (!hoveredPicker) return;
+
+        this.#handlerMousemoveYear(hoveredPicker, event);
+    }
+
     #getConfigFromClickedEl(clickedEl) {
         const calendarId = clickedEl.closest(`.input_${this.#ccn}_outer_wrap`).id;
         return this.#getConfigById(calendarId);
@@ -538,11 +679,37 @@ class ZembiS_Calendar {
         return this.#configurations.find(cfg => cfg.id === id);
     }
 
+    #handlerMousemoveYear(hoveredPicker, event) {
+        const yearContainerEl = event.target.closest(`.${this.#ccn}_years_container`);
+
+        const config = this.#getConfigById(hoveredPicker.id);
+
+        const cursorEl = document.querySelector(`#${config.id} .${this.#ccn}_cursor_to_follow`);
+        if (!cursorEl) return;
+
+        cursorEl.style.opacity = '0';
+        cursorEl.style.visibiliy = 'hidden';
+        if (!yearContainerEl) return;
+        cursorEl.style.opacity = '0.8';
+        cursorEl.style.visibiliy = 'visible';
+
+
+        const { top, left } = yearContainerEl.getBoundingClientRect();
+
+        const offsetX = event.clientX - left;
+        const offsetY = event.clientY - top;
+
+        requestAnimationFrame(() => {
+            cursorEl.style.top = `${offsetY}px`;
+            cursorEl.style.left = `${offsetX}px`;
+        });
+    }
+
     #handlerClickArrowsNav(clickedEl, event) {
         const clickedAnArrow = event.target.closest(`.input_${this.#ccn}_nav_arrow`);
         if (!clickedAnArrow) return;
 
-        const config = this.#getConfigById(clickedEl?.id);
+        const config = this.#getConfigById(clickedEl.id);
 
         let navDirection = -1;
         if (clickedAnArrow.name === 'right_arrow') {
@@ -550,6 +717,65 @@ class ZembiS_Calendar {
         }
 
         this.#navigateMonth(config, navDirection);
+    }
+
+    #handlerClickYearToNav(clickedEl, event) {
+        const clickedYear = event.target.closest(`.${this.#ccn}_year_header_title_clickable`);
+        if (!clickedYear) return;
+
+        const config = this.#getConfigById(clickedEl.id);
+
+        let yearsWrap = document.querySelector(`#${config.id} .${this.#ccn}_years_wrap`);
+
+        if (!yearsWrap) return;
+
+        const currentYearEl = yearsWrap.querySelector(`[data-year='${config.currentMonthYear.getFullYear()}']`);
+
+        // ALWAYS SCROLL INTO CURRENT CHOSEN YEAR VIEW
+        yearsWrap.classList.toggle(`${this.#ccn}_close_status`);
+        // IF RENDER, SCROLL INTO VIEW
+        if (!yearsWrap.classList.contains(`.${this.#ccn}_close_status`)) {
+            requestAnimationFrame(() => {
+                const yearsWrapHeight = yearsWrap.clientHeight;
+                const currentYearElHeight = currentYearEl.clientHeight;
+
+                const currentYearElOffsetTop = currentYearEl.offsetTop;
+                const currentYearElCenter = currentYearElOffsetTop + (currentYearElHeight / 2);
+
+                const yearsWrapCenter = yearsWrap.scrollTop + (yearsWrapHeight / 2);
+
+                const scrollToPosition = currentYearElCenter - yearsWrapHeight / 2;
+
+                yearsWrap.scrollTo({
+                    top: scrollToPosition,
+                    behavior: "smooth"
+                });
+            });
+        }
+    }
+
+    #handlerClickYear(clickedEl, event) {
+        const clickedYearWrap = event.target.closest(`.${this.#ccn}_years_wrap`);
+        if (!clickedYearWrap) return;
+
+        const clickedYear = event.target.closest(`.${this.#ccn}_year`);
+        if (!clickedYear) return;
+
+        const config = this.#getConfigById(clickedEl.id);
+
+        let currentYear = config.currentMonthYear.getFullYear();
+        let targetYear = clickedYear.getAttribute('data-year');
+
+        let navDirection = (targetYear - currentYear) * 12;
+
+        if (navDirection) {
+            this.#navigateMonth(config, navDirection);
+        }
+        clickedYearWrap.classList.toggle(`${this.#ccn}_close_status`);
+
+        let activeClass = `${this.#ccn}_active_year`;
+        clickedYearWrap.querySelector(`.${activeClass}`).classList.remove(activeClass);
+        clickedYear.classList.add(activeClass);
     }
 
     #handlerClickDay(event) {
@@ -591,14 +817,24 @@ class ZembiS_Calendar {
     #configureActiveDay(clickedEl, config) {
         config.daysHandler.previousDay = config.daysHandler.currentDay;
         const previousClickedEl = document.querySelector(`#${config.id} [data-day="${config.daysHandler.previousDay}"].${this.#ccn}_day_clickable`);
-        previousClickedEl.classList.remove('active');
+        previousClickedEl.classList.remove(`${this.#ccn}_active_day`);
         previousClickedEl.setAttribute('aria-checked', 'false');
 
         config.daysHandler.currentDay = clickedEl.getAttribute('data-day');
-        clickedEl.classList.add('active');
+        clickedEl.classList.add(`${this.#ccn}_active_day`);
         clickedEl.setAttribute('aria-checked', 'true');
     }
 
+    #configureActiveYear(clickedEl, config) {
+        config.daysHandler.previousDay = config.daysHandler.currentDay;
+        const previousClickedEl = document.querySelector(`#${config.id} [data-day="${config.daysHandler.previousDay}"].${this.#ccn}_day_clickable`);
+        previousClickedEl.classList.remove(`${this.#ccn}_active_day`);
+        previousClickedEl.setAttribute('aria-checked', 'false');
+
+        config.daysHandler.currentDay = clickedEl.getAttribute('data-day');
+        clickedEl.classList.add(`${this.#ccn}_active_day`);
+        clickedEl.setAttribute('aria-checked', 'true');
+    }
 
     #getSavedDataOfCurrentConfigId(id) {
         return this.#savedData.filter((dataObj) => dataObj.id === id);
@@ -606,7 +842,7 @@ class ZembiS_Calendar {
 
 
 
-    modifyCalendar({ id = null, startingMonthYear = null, primaryColor = null, secondaryColor = null, limits = null, day = null }) {
+    modifyCalendar({ id = null, startingMonthYear = null, dateFormat = null, primaryColor = null, secondaryColor = null, limits = null, day = null, animate = null }) {
         // CHECK IF ID EXISTS IN this.#configurations ARRAY
         const givenId = this.#validateString(id);
         try {
@@ -648,13 +884,19 @@ class ZembiS_Calendar {
 
             // UPDATE CONFIGURATION WITH NEW VALUES
             config.currentMonthYear = this.#validateDate(startingMonthYear, config.currentMonthYear);
+            config.dateFormat = this.#validateDateFormat(dateFormat.toUpperCase(), config.dateFormat);
             config.primaryColor = this.#validateString(primaryColor, config.primaryColor);
             config.secondaryColor = this.#validateString(secondaryColor, config.secondaryColor);
+            // NO UPDATE FOR CURSOR AS IT IS IMPORTANT TO INITIATE THE FUNCTIONALITY SO AS TO DECIDE IF WE WILL LOAD THE MOUSE EVENT LISTENER
             config.limits = updatedLimits;
             config.day = {
                 myClass: this.#validateString(day?.myClass, config.day.myClass),
                 clickable: this.#validateBoolean(day?.clickable, config.day.clickable),
                 onClickDay: this.#validateFunction(day?.onClickDay, config.day.onClickDay),
+            };
+            config.animate = {
+                fadeDatePicker: this.#validateInteger(animate?.fadeDatePicker, config.animate.fadeDatePicker),
+                fadeYearPicker: this.#validateInteger(animate?.fadeYearPicker, config.animate.fadeYearPicker),
             };
 
             // RE-RENDER THE CALENDAR WITH UPDATED CONFIGURATION
