@@ -1,6 +1,6 @@
 # Custom Calendar (Under development)
 
-## ADD TO YOUR HEADER THIS SCRIPTS
+## ADD TO YOUR HEADER THESE SCRIPTS
 ```
 <link rel="stylesheet" href="https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css">
 <script src="https://zembi.github.io/ZembiS_Calendar/Assets/JS/ZembiS_Calendar.js"></script>
