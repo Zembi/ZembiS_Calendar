@@ -1,3 +1,8 @@
+.input_calendar_vfz_outer_wrap,
+.input_calendar_vfz_outer_wrap * {
+    box-sizing: border-box;
+}
+
 .input_calendar_vfz_outer_wrap {
     /* ADD MY OWN CSS */
     --calendar-background-color: white;
@@ -27,13 +32,11 @@
     position: absolute;
     top: 100%;
     left: 0;
-    background: white;
     color: var(--calendar-text-color);
     opacity: 1;
     visibility: visible;
-    border: 1px solid #ccc;
-    overflow: hidden;
-    z-index: 1000;
+    overflow: visible;
+    z-index: 10000;
 }
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_cursor_to_follow {
@@ -55,12 +58,8 @@
     transform: translate(-50%, -50%);
 }
 
-.input_calendar_vfz_outer_wrap.calendar_vfz_close_status {
-    user-select: none;
-    opacity: 0 !important;
-    visibility: hidden !important;
-}
-
+.input_calendar_vfz_outer_wrap.calendar_vfz_close_status,
+.calendar_vfz_overlay_for_mobile.calendar_vfz_close_status,
 .input_calendar_vfz_outer_wrap .calendar_vfz_close_status {
     user-select: none;
     opacity: 0 !important;
@@ -68,6 +67,10 @@
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_inner_calendar {
+    visibility: visible;
+    background: white;
+    opacity: 1;
+    border: 1px solid #ccc;
     padding: 10px;
 }
 
@@ -86,6 +89,13 @@
     display: flex;
 }
 
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_nav_arrow.calendar_vfz_disable_arrow {
+    user-select: none !important;
+    opacity: 0;
+    visibility: none;
+    cursor: auto !important;
+}
+
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_header_left_arrow_wrap,
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_header_right_arrow_wrap {
     display: flex;
@@ -94,7 +104,7 @@
     padding: 4px 3px;
 }
 
-.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_left_arrow .input_calendar_vfz_arrow_image {
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_right_arrow .input_calendar_vfz_arrow_image {
     transform: rotateY(180deg);
 }
 
@@ -105,8 +115,18 @@
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_arrow_image {
-    width: 20px;
+    width: 35px;
     padding: 3px;
+}
+
+/* SVG */
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_arrow_image .st2 {
+    fill: black;
+    transition: fill 0.3s;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_arrow_image:hover .st2 {
+    fill: red;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_title_wrap {
@@ -131,7 +151,7 @@
     flex: 1 1;
 }
 
-.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_year_header_title_clickable {
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_year_header_title.calendar_vfz_clickable {
     cursor: pointer;
 }
 
@@ -168,7 +188,7 @@
     padding: 4px;
 }
 
-.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day_clickable {
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_clickable {
     position: relative;
     display: block;
     font-size: var(--calendar-day-font-size);
@@ -180,18 +200,54 @@
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_active_day,
-.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day_clickable.calendar_vfz_active_day {
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_clickable.calendar_vfz_active_day {
     background-color: var(--calendar-active-day-bg);
     color: var(--calendar-active-day-color);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_current_day,
-.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day_clickable.calendar_vfz_current_day {
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_clickable.calendar_vfz_current_day {
     background-color: var(--calendar-current-day-bg);
     color: var(--calendar-current-day-color);
 }
 
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_disabled_day {
+    color: grey;
+    text-decoration: line-through;
+}
 
+
+/* HELPER WRAP */
+.input_calendar_vfz_outer_wrap .calendar_vfz_wrap_helper {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: -1;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_helper_body_wrap {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.input_calendar_vfz_outer_wrap:hover .calendar_vfz_today_button_wrap.calendar_vfz_activate_today_btn {
+    transform: translate(-50%, 100%);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_today_button_wrap {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translate(-50%, 0);
+    transition: transform 0.4s;
+}
+
+
+/* YEARS WRAP */
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap {
     position: absolute;
     display: block;
@@ -263,9 +319,12 @@
     position: relative;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: min-content;
     gap: 2px;
-    overflow-x: hidden;
+    min-height: 100%;
+    overflow: hidden;
     padding: 10px 5px 10px 10px;
+    box-sizing: border-box;
 }
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_year {
@@ -294,4 +353,37 @@
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_year.calendar_vfz_active_year {
     background-color: var(--calendar-active-year-bg);
     color: var(--calendar-active-year-color);
+}
+
+
+
+
+
+/* MOBILE */
+.calendar_vfz_overlay_for_mobile {
+    display: none !important;
+    z-index: -1 !important;
+}
+
+@media (max-width: 567px) {
+    .input_calendar_vfz_outer_wrap {
+        position: fixed;
+        left: 50% !important;
+        top: 50% !important;
+        max-width: 300px;
+        width: 90%;
+        min-width: 230px;
+        transform: translate(-50%, -50%);
+    }
+
+    .calendar_vfz_overlay_for_mobile {
+        position: fixed !important;
+        display: block !important;
+        height: 100dvh !important;
+        width: 100dvw !important;
+        top: 0 !important;
+        left: 0 !important;
+        background-color: rgba(0, 0, 0, 0.3);
+        z-index: 9999 !important;
+    }
 }

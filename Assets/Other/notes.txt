@@ -1,0 +1,58 @@
+
+
+
+1. (Function) renderCalendar(
+    == (Selector) inputToAttach - [Input field to attach the calendar]
+
+
+    == (String) inputPlaceholder - [Placeholder of attached field]
+
+
+    == (Date) openCalendar - [Starting date to open calendar to]
+
+
+    == (Boolean) initDate - [If default active date is the openCalendar one]
+
+
+    == (String) dateFormat - [Format of the date that will be used]
+
+
+    == (Boolean) clickable - [If calendar will have clickable features generally]
+
+
+    == (Object) year {
+        -- (Boolean) clickable - [Decides if Year element is clickable and YearSelector window exists]
+    }
+
+
+    == (Object) month {
+        -- (Boolean) clickable - [Decides if Month element is clickable and MonthSelector window exists]
+    }
+
+
+    == (Object) day {
+        -- (Boolean) clickable - [Decides if Day elements are clickable]
+        -- (Boolean) reClickable - [Decides if Day elements are re triggered on click, in case it is already active]
+        -- (Boolean) closeOnClickDay - [Decides if on clicking a Day element, Calendar should close]
+        -- (Function) onClickDay - [Function to run when Day element is clicked]
+        -- (String) myClass - [Custom class for Days elements]
+    } 
+
+
+    == (Object) navigation {
+        -- (Boolean) activeArrows - [Decides if Calendar's navigation arrows are visible and active]
+    }
+
+
+    == (Boolean) cursorEffect - [Cursor following span for styling reasons only]
+
+
+    == (Object) style {
+        ...
+        -- (Object) transitions: {
+            --- (Integer) fadeDatePicker - [Fade in/out Animation of Calendar General]
+            --- (Integer) fadeYearPicker - [Fade in/out Animation of Calendar's Year window]
+            --- (Integer) cursorEffectDelay - [Delay of cursor follow if is cursorEffect is active]
+        }
+    }
+)
