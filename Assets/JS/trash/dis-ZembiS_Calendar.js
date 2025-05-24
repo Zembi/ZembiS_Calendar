@@ -17,7 +17,6 @@
         #monthsForUse = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
         #weekDays = [];
-        #weekDaysForUse = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
         // DOMCONTENTLOAD CHECKER SO AS TO AVOID MULTIPLE LISTENERS 
         static #domReadyPromise = new Promise(resolve => {
