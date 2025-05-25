@@ -27,7 +27,15 @@ class Calendar_Controller {
     }
 
     firstTimeActions() {
+        // REQUIRED FOR STYLING OF CALENDARS
+        this.iniBodyStyle();
+
         this.eventHandler.setupEventDelegation();
+    }
+
+    iniBodyStyle() {
+        document.body.style.position = 'relative';
+        document.body.style.contain = 'layout';
     }
 
     languageConfiguration(extraLanguages, weekStartDay) {
@@ -80,18 +88,18 @@ class Calendar_Controller {
         // PREVENT INPUT TO BE ATTACHED TO TWO A CALENDAR
         const existingConfig = this.configurations.find(c => c.inputToAttach === givenInput);
         if (existingConfig) {
-            console.error('This input is already attached to a calendar. Detach it before rendering a new one.');
+            console.error('VFZ_Calendar: This input is already attached to a calendar. Detach it before rendering a new one.');
             return existingConfig;
         }
 
         try {
             if (!givenInput) {
-                console.error('Invalid input element selector trying to be attached to ZembiS_Calendar');
+                console.error('VFZ_Calendar: Invalid input element selector trying to be attached to ZembiS_Calendar');
                 return;
             }
 
             if (weekStartDay < 0 || weekStartDay > 6) {
-                console.warn('Invalid week start day');
+                console.warn('VFZ_Calendar: Invalid week start day');
                 weekStartDay = 1;
             }
 
@@ -148,6 +156,7 @@ class Calendar_Controller {
                     clickable: this.validatorHandle.validateBoolean(day?.clickable, true),
                     reClickable: this.validatorHandle.validateBoolean(day?.reClickable, false),
                     closeOnClickDay: this.validatorHandle.validateBoolean(day?.closeOnClickDay, true),
+                    displayDateAfterClick: this.validatorHandle.validateBoolean(day?.displayDateAfterClick, true),
                     onClickDay: this.validatorHandle.validateFunction(day?.onClickDay),
                     myClass: this.validatorHandle.validateString(day?.myClass, ''),
                     // HIDDEN VALUES (NOT FROM CONFIG)
@@ -167,7 +176,7 @@ class Calendar_Controller {
             // return this.configManager.getSavedDataOfCurrentConfigId(config.id);
             return this.configManager.getConfigById(config.id);
         } catch (e) {
-            console.error(e);
+            console.error(`VFZ_Calendar: ${e}`);
             return;
         }
     }
@@ -200,7 +209,7 @@ class Calendar_Controller {
                 }
             }
             if (!isCssLoaded) {
-                console.warn(`The needed css file for the ZembiS_Calendar script, is not included in your code.\nAdd to the head of your page, before the js script the following:\n<link rel="stylesheet" href="https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css">`);
+                console.warn(`VFZ_Calendar: The needed css file for the ZembiS_Calendar script, is not included in your code.\nAdd to the head of your page, before the js script the following:\n<link rel="stylesheet" href="https://zembi.github.io/ZembiS_Calendar/Assets/CSS/calendar.css">`);
                 return;
             }
         }

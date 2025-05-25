@@ -15,11 +15,11 @@ class DateManager {
     }
 
     getCurrentDay(d, m, y) {
-        return new Date(y, m + 1, d).getDay();
+        return new Date(y, m, d).getDay();
     }
 
     getFirstDayOfMonth(m, y) {
-        return new Date(y, m + 1, 1).getDay();
+        return new Date(y, m, 1).getDay();
     }
 
     getNumOfDaysInMonth(m, y) {
@@ -46,12 +46,23 @@ class DateManager {
     }
 
     clickDayCoreFunctionality(clickedEl, config) {
-        if (config.inputToAttach.hasAttribute('value')) {
-            config.inputToAttach.value = clickedEl.getAttribute('data-date');
+        const element = config.inputToAttach;
+        const typeOfInput = element.tagName.toLowerCase();
+        const dateValue = clickedEl.getAttribute('data-date');
+
+        if (config.day.displayDateAfterClick) {
+            if (typeOfInput === 'input' || typeOfInput === 'textarea') {
+                element.value = dateValue;
+            }
+            else if (typeOfInput === 'select') {
+                this.controller.eventHandler.setSelectValueQuietly(element, dateValue);
+            }
+            else {
+                element.innerText = dateValue;
+            }
         }
-        else {
-            config.inputToAttach.innerText = clickedEl.getAttribute('data-date');
-        }
+        element.setAttribute('data-active-date', dateValue);
+
         this.configureActiveDay(clickedEl, config);
     }
 

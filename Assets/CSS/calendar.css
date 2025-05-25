@@ -30,7 +30,7 @@
 
     display: block;
     position: absolute;
-    top: 100%;
+    top: 0;
     left: 0;
     color: var(--calendar-text-color);
     opacity: 1;
@@ -64,6 +64,8 @@
     user-select: none;
     opacity: 0 !important;
     visibility: hidden !important;
+    /* transform: scale(0);
+    transform-origin: top left; */
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_inner_calendar {
@@ -215,6 +217,11 @@
     color: grey;
     text-decoration: line-through;
     background-color: transparent;
+    cursor: not-allowed;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_disabled_day.outofbound {
+    cursor: auto;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_next_month_day,

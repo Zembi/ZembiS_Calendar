@@ -13,6 +13,11 @@ class DOMManager {
         this.closeElement(config.coreElements.helperBody);
         this.closeElement(config.coreElements.yearsWrap);
         this.closeElement(config.coreElements.mobileLayerWrap);
+
+        const element = config.inputToAttach;
+        if (element.tagName.toLowerCase() == 'button') {
+            element.disabled = false;
+        }
     }
 
     closeElement(element) {
@@ -31,6 +36,7 @@ class DOMManager {
     createOrUpdateInputCalendar(config) {
         // STEP 1: PREPARE INPUT FIELD AND CREATE OUTER WRAP
         this.prepareInputField(config);
+
         const outerWrap = this.createOuterWrap(config);
 
         // STEP 2: REMOVE ANY PREVIOUS EVENT LISTENERS ATTACHED TO THE CONFIGURATION
@@ -103,6 +109,13 @@ class DOMManager {
             config.inputToAttach.type = "text";
             config.inputToAttach.readOnly = true;
             config.inputToAttach.placeholder = config.inputPlaceholder;
+        }
+        else if (typeOfInput === 'textarea') {
+            config.inputToAttach.readOnly = true;
+            config.inputToAttach.placeholder = config.inputPlaceholder;
+        }
+        else if (typeOfInput === 'select') {
+            console.warn('VFZ_Calendar: With select elements the placeholder option can not be utilized');
         }
         else {
             config.inputToAttach.readOnly = true;
@@ -374,7 +387,12 @@ class DOMManager {
             const formattedActiveDate = this.controller.dateManager.formatDate(config, activeDay, activeMonth, activeYear);
             const initDateElement = document.querySelector(`#${config.id} [data-date="${formattedActiveDate}"]`);
             if (initDateElement) {
-                this.controller.eventHandler.onClickDayAction(initDateElement, config, false);
+                if (!initDateElement.classList.contains('outofbound')) {
+                    this.controller.eventHandler.onClickDayAction(initDateElement, config, false);
+                }
+                else {
+                    initDateElement.classList.add(`${this.controller.ccn}_active_day`);
+                }
             }
         }
 
@@ -422,16 +440,22 @@ class DOMManager {
             year = month_obj.prev_month.getFullYear();
             is_for_prev_month = true;
             c = firstDayOfMonth - 1;
-            console.log(month_obj.prev_month);
         }
         else if (config.rules.displayNextMonth && month_obj.next_month) {
             custom_class = ` ${this.controller.ccn}_next_month_day`;
             count_days = 0;
-            month = month_obj.next_month.getDate();
+            month = month_obj.next_month.getMonth();
             year = month_obj.next_month.getFullYear();
             is_for_next_month = true;
             c = -1;
-            console.log(month_obj.next_month);
+        }
+        else {
+            let html = '';
+            for (let i = 0; i < firstDayOfMonth; i++) {
+                html += `<span class="${this.controller.ccn}_day outofbound" data-day="-1" data-date="-1"></span>`;
+            }
+
+            return html;
         }
 
         let data_day = count_days;
@@ -452,13 +476,29 @@ class DOMManager {
                     ? maxOpacity - normalized * (maxOpacity - minOpacity)
                     : 0;
 
-            const use_or_not_fade = config.style.includeFadedDays
-                ? `style="color: rgba(169, 169, 169, ${color_opacity.toFixed(2)});"`
+            const color_fonts = 'rgba(169, 169, 169,';
+            const bg_color_active = 'rgba(0, 114, 9,';
+            let use_or_not_fade = config.style.includeFadedDays
+                ? `style="color: ${color_fonts} ${color_opacity.toFixed(2)});`
                 : '';
 
             let data_date = data_day != -1 ? this.controller.dateManager.formatDate(config, data_day, month, year) : -1;
 
-            html += `<span class="${this.controller.ccn}_day${custom_class}" data-day="${data_day}" data-date="${data_date}" ${use_or_not_fade}}>${view_data_day}</span>`;
+            const currDay = new Date(`${year}-${month + 1}-${data_day}`);
+
+            // CORE CHECKS 
+            const currentMonthCheck = this.controller.dateManager.compareTwoDates(currDay, new Date());
+            const availableDay = this.controller.validatorHandle.validateDateConsideringProccessedLimits(currDay, config.processedLimits);
+            const isActiveDay = config.day.handler?.activeDate ? this.controller.dateManager.compareTwoDates(currDay, config.day.handler.activeDate) : null;
+            if (isActiveDay) use_or_not_fade += `background-color: ${bg_color_active} ${color_opacity.toFixed(2) / 2});`;
+
+            use_or_not_fade += '"';
+
+            let currentDayClass = '';
+            if (currentMonthCheck) currentDayClass += ` ${ccn}_current_day`;
+            if (!availableDay) currentDayClass += ` ${this.controller.ccn}_disabled_day`;
+
+            html += `<span class="${this.controller.ccn}_day${custom_class} ${currentDayClass} outofbound" data-day="${data_day}" data-date="${data_date}" ${use_or_not_fade}}>${view_data_day}</span>`;
             c--;
         }
         return html;

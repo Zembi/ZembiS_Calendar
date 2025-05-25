@@ -41,7 +41,7 @@ class ValidatorHandle {
         const input = document.querySelector(config.inputToAttach);
         if (input) {
             if (input.classList.contains(this.controller.flagClassToAvoidDuplicates)) {
-                console.error(`Element '${config.inputToAttach}' is already attached to ZembiS_Calendar.`);
+                console.error(`VFZ_Calendar: Element '${config.inputToAttach}' is already attached to ZembiS_Calendar.`);
                 return false;
             }
 
@@ -49,7 +49,7 @@ class ValidatorHandle {
             input.classList.add(this.controller.flagClassToAvoidDuplicates);
             return true;
         }
-        console.error(`No element '${config.inputToAttach}' was found, to be attached to ZembiS_Calendar.`);
+        console.error(`VFZ_Calendar: No element '${config.inputToAttach}' was found, to be attached to ZembiS_Calendar.`);
         return false;
     }
 

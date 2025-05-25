@@ -28,8 +28,22 @@ class EventHandler {
             const clickedEl = event.target.closest(this._clckHold.selectorTarget);
             if (!clickedEl) return;
 
+            if (this._clckHold.activeHoldTimeoutID) {
+                clearTimeout(this._clckHold.activeHoldTimeoutID);
+                this._clckHold.activeHoldTimeoutID = null;
+            }
+            if (this._clckHold.immediateTimeoutID) {
+                clearTimeout(this._clckHold.immediateTimeoutID);
+                this._clckHold.immediateTimeoutID = null;
+            }
+
             this._clckHold.isHeld = true;
-            this._clckHold.callback.call(this, wrapEl, event);
+
+            this._clckHold.immediateTimeoutID = setTimeout(() => {
+                if (this._clckHold.isHeld) {
+                    this._clckHold.callback.call(this, wrapEl, event);
+                }
+            }, 50);
 
             const holdCallback = () => {
                 if (this._clckHold.isHeld) {
@@ -38,7 +52,7 @@ class EventHandler {
                 }
             };
 
-            this._clckHold.activeHoldTimeoutID = setTimeout(holdCallback, 150);
+            this._clckHold.activeHoldTimeoutID = setTimeout(holdCallback, 300);
         }
 
         this._clckHold.onHoldEnd = () => {
@@ -60,6 +74,12 @@ class EventHandler {
             const isInsideCalendar = config.coreElements.calendarWrap.contains(event.target);
 
             if (isTargetInput) {
+                if (targetInput.tagName.toLowerCase() == 'select') {
+                    this.initSelectActionsOnOpenCloseCalendar(targetInput);
+                }
+                if (targetInput.tagName.toLowerCase() == 'button') {
+                    targetInput.disabled = true;
+                }
                 this.controller.domManager.openElement(config.coreElements.calendarWrap);
                 this.controller.domManager.openElement(config.coreElements.calendarInnerWrap);
                 this.controller.domManager.openElement(config.coreElements.mobileLayerWrap);
@@ -87,6 +107,8 @@ class EventHandler {
             const rect = targetInput.getBoundingClientRect();
             calendarWrap.style.top = `${rect.bottom + window.scrollY}px`;
             calendarWrap.style.left = `${rect.left + window.scrollX}px`;
+            console.log(calendarWrap.style.top);
+            console.log(calendarWrap.style.left);
 
             // 
             if (!calendarWrap.classList.contains(`${this.controller.ccn}_close_status`)) {
@@ -106,7 +128,7 @@ class EventHandler {
         if (config.functionsHandler) {
             if (config.functionsHandler._calendarClickHandler) {
                 document.removeEventListener('click', config.functionsHandler._calendarClickHandler);
-                console.log(config.functionsHandler);
+                // console.log(config.functionsHandler);
                 config.functionsHandler._calendarClickHandler = null;
             }
         }
@@ -134,7 +156,7 @@ class EventHandler {
             const ccn = this.controller.ccn;
             const observer = new MutationObserver(() => {
                 const cursorEl = document.querySelector(`.input_${ccn}_outer_wrap .${ccn}_cursor_to_follow`);
-                console.log(cursorEl);
+                // console.log(cursorEl);
                 if (cursorEl) {
                     if (!this.controller.mousemoveListenerAdded) {
                         this.controller.mouseMoveEventsDelegation = (event) => {
@@ -284,6 +306,7 @@ class EventHandler {
         const ccn = this.controller.ccn;
         const clickedEl = event.target.closest(`.${ccn}_day.${ccn}_clickable`);
         if (!clickedEl) return;
+        if (clickedEl.classList.contains(`${this.controller.ccn}_disabled_day`)) return;
 
         const pickedNumDay = clickedEl.getAttribute('data-day');
 
@@ -308,7 +331,7 @@ class EventHandler {
 
         // HERE ADD THE CUSTOM EVENT LISTENER FROM THE USER
         if (config.day.onClickDay && runAllFunctions) {
-            config.day.onClickDay(clickedEl.getAttribute('data-date'), clickedEl);
+            config.day.onClickDay(clickedEl.getAttribute('data-date'), clickedEl, config.inputToAttach);
         }
 
 
@@ -361,5 +384,27 @@ class EventHandler {
             cursorEl.style.top = `${offsetY}px`;
             cursorEl.style.left = `${offsetX}px`;
         });
+    }
+
+    initSelectActionsOnOpenCloseCalendar(targetInput) {
+        console.log(targetInput);
+        targetInput.blur();
+    }
+
+    setSelectValueQuietly(selectElement, value) {
+        const matchingOption = selectElement.querySelector(`option[value="${value}"]`);
+
+        if (matchingOption) {
+            Array.from(selectElement.options).forEach(opt => opt.selected = false);
+
+            matchingOption.selected = true;
+
+            selectElement.value = value;
+
+            selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+
+            return true;
+        }
+        return false;
     }
 }

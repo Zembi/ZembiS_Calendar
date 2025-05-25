@@ -1,18 +1,18 @@
 const dateId1 = calendarController.renderCalendar({
     inputToAttach: '.test1',
     inputPlaceholder: 'Date Time',
-    openCalendar: new Date('2025-5-5'),
-    weekStartDay: 0,
-    // initDate: true,
-    // extraLanguages: {
-    //     'fr': {
-    //         months: ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'],
-    //         weekDays: ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
-    //         today: 'aujourd\'hui',
-    //     },
-    // },
+    openCalendar: new Date('2025-5-5'), // IF initDate: true THEN IT WILL BE THE ACTIVE DATE, OTHERWISE IT WILL JUST OPEN TO TO THIS MONTH - YEAR (IF LIMITS APPROVE IT) 
+    weekStartDay: 6,
+    initDate: true,
+    extraLanguages: {
+        'fr': {
+            months: ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'],
+            weekDays: ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
+            today: 'aujourd\'hui',
+        },
+    },
     displayPreviousMonth: true,
-    displayNextMonth: true,
+    // displayNextMonth: true,
     navigation: {
         activeArrows: true
     },
@@ -27,7 +27,7 @@ const dateId1 = calendarController.renderCalendar({
     },
     year: {
         yearLimits: [2021, 2025],
-        // // Set global month and day limits for all years
+        // Set global month and day limits for all years
         globalLimits: {
             months: [0, 11], // Allow all months globally
             days: {
@@ -70,32 +70,72 @@ const dateId1 = calendarController.renderCalendar({
         myClass: '',
         reClickable: false,
         closeOnClickDay: false,
-        onClickDay: (date, target) => {
+        onClickDay: (date, targetDay, targetCalendarEl) => {
             // console.log(date);
             // console.log(target);
         },
     },
 });
 
-// const dateId2 = calendarController.renderCalendar({
-//     inputToAttach: '.test2',
-//     clickable: true,
-//     openCalendar: new Date('2023-8-12'),
-//     initDate: false,
-//     year: {
-//         yearLimits: [0, 2025],
-//     },
-//     day: {
-//         // clickable: true
-//     },
-//     style: {
-//         transitions: {
-//             fadeDatePicker: 300,
-//             fadeYearPicker: 400,
-//             cursorEffectDelay: 100
-//         }
-//     },
-// });
+const dateId2 = calendarController.renderCalendar({
+    inputToAttach: '.test2',
+    clickable: true,
+    openCalendar: new Date('2023-8-12'),
+    initDate: false,
+    year: {
+        yearLimits: [0, 2025],
+    },
+    day: {
+        // clickable: true
+    },
+    style: {
+        transitions: {
+            fadeDatePicker: 300,
+            fadeYearPicker: 400,
+            cursorEffectDelay: 100
+        }
+    },
+    day: {
+        myClass: '',
+        reClickable: true,
+        closeOnClickDay: true,
+        displayDateAfterClick: false,
+        onClickDay: (date, targetDay, targetCalendarEl) => {
+            // console.log(date);
+            // console.log(target);
+            targetCalendarEl.setAttribute('data-helper', date);
+        },
+    },
+});
 
 
-console.dir(dateId1);
+const dateId3 = calendarController.renderCalendar({
+    inputToAttach: '.test3',
+    clickable: true,
+    openCalendar: new Date('2025-5-5'),
+    initDate: false,
+    year: {
+        yearLimits: [0, 2025],
+    },
+    day: {
+        // clickable: true
+    },
+    style: {
+        transitions: {
+            fadeDatePicker: 300,
+            fadeYearPicker: 400,
+            cursorEffectDelay: 100
+        }
+    },
+    day: {
+        myClass: '',
+        reClickable: true,
+        closeOnClickDay: true,
+        displayDateAfterClick: false,
+        onClickDay: (date, targetDay, targetCalendarEl) => {
+            // console.log(date);
+            // console.log(target);
+        },
+    },
+});
+
