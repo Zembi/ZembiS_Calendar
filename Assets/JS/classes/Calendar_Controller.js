@@ -27,15 +27,7 @@ class Calendar_Controller {
     }
 
     firstTimeActions() {
-        // REQUIRED FOR STYLING OF CALENDARS
-        this.iniBodyStyle();
-
         this.eventHandler.setupEventDelegation();
-    }
-
-    iniBodyStyle() {
-        document.body.style.position = 'relative';
-        document.body.style.contain = 'layout';
     }
 
     languageConfiguration(extraLanguages, weekStartDay) {

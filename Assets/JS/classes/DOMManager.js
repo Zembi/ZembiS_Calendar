@@ -18,6 +18,9 @@ class DOMManager {
         if (element.tagName.toLowerCase() == 'button') {
             element.disabled = false;
         }
+        else if (element.tagName.toLowerCase() == 'select') {
+            element.disabled = false;
+        }
     }
 
     closeElement(element) {

@@ -107,8 +107,6 @@ class EventHandler {
             const rect = targetInput.getBoundingClientRect();
             calendarWrap.style.top = `${rect.bottom + window.scrollY}px`;
             calendarWrap.style.left = `${rect.left + window.scrollX}px`;
-            console.log(calendarWrap.style.top);
-            console.log(calendarWrap.style.left);
 
             // 
             if (!calendarWrap.classList.contains(`${this.controller.ccn}_close_status`)) {
@@ -146,7 +144,7 @@ class EventHandler {
 
     // THIS IS IMPORTANT TO ENSURE THAT NO DUPLICATE LISTENERS WILL BE ADDED
     setupEventDelegation() {
-        this.ClickAndHold(`.input_${this.controller.ccn}_nav_arrow`, this.handlerClickArrowsNav);
+        // this.ClickAndHold(`.input_${this.controller.ccn}_nav_arrow`, this.handlerClickArrowsNav);
 
         document.addEventListener('click', (event) => {
             this.clickEventsDelegation(event);
@@ -179,7 +177,7 @@ class EventHandler {
         if (!clickedEl) return;
 
         // EVENT LISTENERS FOR NAVIGATING MONTHS
-        // this.handlerClickArrowsNav(clickedEl, event);
+        this.handlerClickArrowsNav(clickedEl, event);
         // EVENT LISTENERS FOR NAVIGATING TO YEARS
         this.handlerClickYearToNav(clickedEl, event);
         // EVENT LISTENERS FOR SELECTING YEARS
@@ -387,8 +385,7 @@ class EventHandler {
     }
 
     initSelectActionsOnOpenCloseCalendar(targetInput) {
-        console.log(targetInput);
-        targetInput.blur();
+        targetInput.disabled = true;
     }
 
     setSelectValueQuietly(selectElement, value) {
