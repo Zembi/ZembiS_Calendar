@@ -131,12 +131,12 @@ class ValidatorHandle {
             return false;
         }
 
-        const { minMonth, maxMonth, months } = yearLimits;
+        const { minMonth, maxMonth, days } = yearLimits.months;
         if (month < minMonth || month > maxMonth) {
             return false;
         }
 
-        const monthLimits = months.days[month];
+        const monthLimits = days[month];
         if (!monthLimits) {
             return false;
         }

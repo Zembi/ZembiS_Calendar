@@ -1,3 +1,23 @@
+/* ===== TEST CONSOLE DESIGN TOKENS ===== */
+:root {
+    --shell-bg: #14171a;
+    --shell-bg-soft: #1c2023;
+    --shell-text: #e7e9e5;
+    --shell-text-soft: #9aa39c;
+
+    --paper: #eef2ef;
+    --paper-line: #cdd8d0;
+    --ink: #1b231d;
+    --ink-soft: #55635a;
+
+    --accent: #007209;
+    --accent-soft: #d9ead9;
+    --highlight: #d98c2b;
+
+    --mono-face: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
+    --serif-face: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+}
+
 * {
     box-sizing: border-box;
 }
@@ -5,21 +25,238 @@
 html,
 body {
     width: 100%;
-    background-color: grey;
-    font-size: 20px;
-    color: white;
-    overflow-x: hidden;
     margin: 0;
     padding: 0;
+    overflow-x: hidden;
+    background-color: var(--shell-bg);
+    color: var(--shell-text);
+    font-family: var(--serif-face);
 }
 
+:focus-visible {
+    outline: 2px solid var(--highlight);
+    outline-offset: 2px;
+}
 
-/*  */
-form {
+/* ===== HEADER ===== */
+.console-header {
+    padding: 56px 24px 40px;
+    max-width: 920px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.console-eyebrow {
+    font-family: var(--mono-face);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin: 0 0 14px;
+}
+
+.console-title {
+    font-family: var(--mono-face);
+    font-size: clamp(28px, 5vw, 42px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 16px;
+    color: var(--shell-text);
+}
+
+.console-subtitle {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--shell-text-soft);
+    max-width: 620px;
+    margin: 0 auto 24px;
+}
+
+.console-stats {
     display: flex;
     justify-content: center;
-    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.console-stats .stat {
+    font-family: var(--mono-face);
+    font-size: 13px;
+    color: var(--shell-text-soft);
+    border: 1px solid var(--shell-bg-soft);
+    background-color: var(--shell-bg-soft);
+    padding: 6px 14px;
+    border-radius: 999px;
+}
+
+.console-stats .stat strong {
+    color: var(--highlight);
+    font-weight: 700;
+}
+
+/* ===== TEST GRID + CARDS ===== */
+.test-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 22px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 32px;
+}
+
+.test-card,
+.controls-card {
+    background-color: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--paper-line);
+    border-radius: 10px;
+    padding: 22px 24px 26px;
+    display: flex;
     flex-direction: column;
+}
+
+.controls-card {
+    max-width: 1180px;
+    margin: 0 auto 64px;
+    padding: 26px 24px 30px;
+}
+
+.card-tag {
+    font-family: var(--mono-face);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    margin: 0 0 10px;
+}
+
+.card-title {
+    font-family: var(--serif-face);
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    color: var(--ink);
+}
+
+.card-desc {
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0 0 16px;
+}
+
+.card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 20px;
+}
+
+.badge {
+    font-family: var(--mono-face);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    background-color: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 5px;
+    padding: 3px 8px;
+}
+
+.card-trigger {
+    margin-top: auto;
+    padding-top: 6px;
+    border-top: 1px dashed var(--paper-line);
+}
+
+/* SHARED LOOK FOR THE ACTUAL CALENDAR TRIGGER ELEMENTS (a / button / select / input) */
+.card-trigger a,
+.card-trigger button,
+.card-trigger select,
+.card-trigger input {
+    display: inline-block;
     width: 100%;
-    padding: 100px 0;
+    font-family: var(--serif-face);
+    font-size: 15px;
+    text-decoration: none;
+    text-align: center;
+    color: #fff;
+    background-color: var(--accent);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 14px;
+    cursor: pointer;
+}
+
+.card-trigger select,
+.card-trigger input {
+    color: var(--ink);
+    background-color: #fff;
+    border: 1px solid var(--paper-line);
+    text-align: left;
+    cursor: text;
+}
+
+.card-trigger select {
+    cursor: pointer;
+}
+
+/* ===== CONTROLS SECTION ===== */
+.controls-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.control-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    text-align: left;
+    background-color: #fff;
+    border: 1px solid var(--paper-line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+}
+
+.control-btn:hover {
+    border-color: var(--accent);
+}
+
+.control-name {
+    font-family: var(--mono-face);
+    font-size: 13px;
+    color: var(--ink);
+}
+
+.control-target {
+    font-size: 13px;
+    color: var(--ink-soft);
+}
+
+/* ===== MOTION ===== */
+@media (prefers-reduced-motion: no-preference) {
+    .test-card,
+    .controls-card {
+        transition: border-color 0.2s ease;
+    }
+
+    .test-card:hover,
+    .controls-card:hover {
+        border-color: var(--accent);
+    }
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 480px) {
+    .console-header {
+        padding: 40px 18px 28px;
+    }
+
+    .test-grid {
+        padding: 0 16px 24px;
+    }
+
+    .controls-card {
+        margin-bottom: 48px;
+    }
 }

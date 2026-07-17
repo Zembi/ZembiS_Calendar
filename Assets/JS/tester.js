@@ -1,8 +1,10 @@
+const calendarController = new ZembiS_Calendar();
+
 const dateId1 = calendarController.renderCalendar({
     inputToAttach: '.test1',
     inputPlaceholder: 'Date Time',
     openCalendar: new Date('2025-5-5'), // IF initDate: true THEN IT WILL BE THE ACTIVE DATE, OTHERWISE IT WILL JUST OPEN TO TO THIS MONTH - YEAR (IF LIMITS APPROVE IT) 
-    weekStartDay: 6,
+    weekStartDay: 1,
     initDate: true,
     extraLanguages: {
         'fr': {
@@ -14,7 +16,8 @@ const dateId1 = calendarController.renderCalendar({
     displayPreviousMonth: true,
     // displayNextMonth: true,
     navigation: {
-        activeArrows: true
+        activeArrows: true,
+        respectMonthLimits: true
     },
     // cursorEffect: true,
     style: {
@@ -139,3 +142,70 @@ const dateId3 = calendarController.renderCalendar({
     },
 });
 
+const dateId4 = calendarController.renderCalendar({
+    inputToAttach: '.test4',
+    clickable: true,
+    openCalendar: new Date(),
+    initDate: false,
+    year: {
+        yearLimits: [2024, 2027],
+        limits: {
+            2026: {
+                months: [0, 11],
+                days: {
+                    6: [10, 25], // JULY 2026: ONLY DAYS 10-25 AVAILABLE, TO MANUALLY VERIFY RANGE TRUNCATION AT A DISABLED-DAY BOUNDARY
+                },
+            },
+        },
+    },
+    day: {
+        rangeSelect: true,
+        rangeMinDays: 7,
+        rangeStepDays: 7,
+        closeOnClickDay: true,
+        displayDateAfterClick: true,
+        onRangeSelect: (startDateStr, endDateStr, rangeInfo, clickedEl, targetCalendarEl) => {
+            console.log('Range selected:', startDateStr, '-', endDateStr, rangeInfo);
+        },
+    },
+    disable: {
+        behavior: 'allowOpenNoAction',
+        message: 'Loading available dates...',
+        spinner: {
+            show: true,
+        },
+        overlay: {
+            color: 'rgba(255, 255, 255, 0.75)',
+        },
+    },
+});
+
+(function() {
+    // MANUAL TEST: disableCalendar/enableCalendar WITH LOADER - CALENDAR 4 USES behavior:'allowOpenNoAction',
+    // SO IT SHOULD STILL OPEN NORMALLY (SHOWING THE SPINNER + MESSAGE OVERLAY) WHILE DISABLED, WITH
+    // DAY/NAV/YEAR CLICKS BLOCKED UNTIL enableCalendar() RUNS 2S LATER
+    document.querySelector('.test-disable-toggle-4').addEventListener('click', () => {
+        calendarController.disableCalendar(dateId4.id);
+        setTimeout(() => {
+            calendarController.enableCalendar(dateId4.id);
+        }, 2000);
+    });
+
+    // MANUAL TEST: setOpenCalendar - SHOULD JUMP WITHOUT A FULL REBUILD (TRY THIS WHILE CALENDAR 1 IS OPEN)
+    document.querySelector('.test-jump-1').addEventListener('click', () => {
+        calendarController.setOpenCalendar(dateId1.id, new Date(2024, 5, 1));
+    });
+
+    // MANUAL TEST: updateYearLimits - DAY-GRID LIMITS AND THE YEAR-PICKER LIST SHOULD BOTH SHRINK TO 2022-2024
+    document.querySelector('.test-shrink-limits-2').addEventListener('click', () => {
+        calendarController.updateYearLimits(dateId2.id, { yearLimits: [2022, 2024] });
+    });
+
+    // MANUAL TEST: destroyCalendar, CALLED INSTANCE-STYLE (dateId3.destroyCalendar()) TO EXERCISE BOTH
+    // CALLING CONVENTIONS - EQUIVALENT TO calendarController.destroyCalendar(dateId3.id). CALENDAR 3'S
+    // DOM/LISTENERS SHOULD BE GONE, AND ITS SELECT SHOULD BE RE-ATTACHABLE AFTERWARDS
+    document.querySelector('.test-destroy-3').addEventListener('click', () => {
+        dateId3.destroyCalendar();
+    });
+
+})();

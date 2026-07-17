@@ -30,30 +30,34 @@ class Calendar_Controller {
         this.eventHandler.setupEventDelegation();
     }
 
+    // COMPUTES AND RETURNS THIS CALENDAR INSTANCE'S OWN LANGUAGE DATA (NOT SHARED STATE - EACH CALENDAR MAY BE
+    // CONFIGURED WITH A DIFFERENT weekStartDay/extraLanguages, SO THIS MUST NOT MUTATE THE SHARED dateManager)
     languageConfiguration(extraLanguages, weekStartDay) {
         const htmlLang = document.querySelector('html').lang;
+        let months, weekDays, todayButtonText;
+
         switch (htmlLang) {
             case 'el':
-                this.dateManager.months = ['Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος', 'Μάιος', 'Ιούνιος', 'Ιούλιος', 'Αύγουστος', 'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος'];
-                this.dateManager.weekDays = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
-                this.dateManager.buttons.currentDate = 'Σήμερα';
+                months = ['Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος', 'Μάιος', 'Ιούνιος', 'Ιούλιος', 'Αύγουστος', 'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος'];
+                weekDays = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο'];
+                todayButtonText = 'Σήμερα';
                 break;
             default:
-                this.dateManager.months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                this.dateManager.weekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                this.dateManager.buttons.currentDate = 'Today';
+                months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                weekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                todayButtonText = 'Today';
                 break;
         }
 
-        if (extraLanguages) {
-            if (extraLanguages[htmlLang]) {
-                this.dateManager.months = extraLanguages[htmlLang].months;
-                this.dateManager.weekDays = extraLanguages[htmlLang].weekDays;
-                this.dateManager.buttons.currentDate = extraLanguages[htmlLang].today;
-            }
+        if (extraLanguages && extraLanguages[htmlLang]) {
+            months = extraLanguages[htmlLang].months;
+            weekDays = extraLanguages[htmlLang].weekDays;
+            todayButtonText = extraLanguages[htmlLang].today;
         }
 
-        this.dateManager.weekDays = [...this.dateManager.weekDays.slice(weekStartDay), ...this.dateManager.weekDays.slice(0, weekStartDay)];
+        weekDays = [...weekDays.slice(weekStartDay), ...weekDays.slice(0, weekStartDay)];
+
+        return { months, weekDays, todayButtonText };
     }
 
     // --------------- RENDER FOR INPUT DATE ---------------
@@ -61,7 +65,7 @@ class Calendar_Controller {
         inputToAttach = null,
         inputPlaceholder = 'Pick a date',
         openCalendar = new Date(),
-        weekStartDay = -1,
+        weekStartDay = null,
         initDate = false,
         extraLanguages = null,
         dateFormat = 'DD-MM-YYYY',
@@ -73,7 +77,8 @@ class Calendar_Controller {
         style = null,
         year = null,
         month = null,
-        day = null
+        day = null,
+        disable = null
     }) {
         const givenInput = this.validatorHandle.validateString(inputToAttach);
 
@@ -90,12 +95,16 @@ class Calendar_Controller {
                 return;
             }
 
-            if (weekStartDay < 0 || weekStartDay > 6) {
+            if (weekStartDay === null) {
+                // NOT PROVIDED BY THE CALLER - DEFAULT TO MONDAY, NO WARNING NEEDED
+                weekStartDay = 1;
+            }
+            else if (weekStartDay < 0 || weekStartDay > 6) {
                 console.warn('VFZ_Calendar: Invalid week start day');
                 weekStartDay = 1;
             }
 
-            this.languageConfiguration(extraLanguages, weekStartDay);
+            const language = this.languageConfiguration(extraLanguages, weekStartDay);
 
             let processedLimits = {};
             openCalendar = this.validatorHandle.validateDate(openCalendar);
@@ -110,6 +119,23 @@ class Calendar_Controller {
                 initDate: this.validatorHandle.validateBoolean(initDate, false),
                 dateFormat: this.validatorHandle.validateDateFormat(dateFormat.toUpperCase(), 'DD-MM-YYYY'),
                 clickable: this.validatorHandle.validateBoolean(clickable, true),
+                // HIDDEN VALUE (NOT FROM CONFIG) - SET VIA disableCalendar()/enableCalendar()
+                disabled: false,
+                disable: {
+                    // 'allowOpenNoAction': STILL OPENS, SHOWS THE LOADER, BLOCKS NAV/YEAR/DAY ACTIONS
+                    // 'blockOpen': THE CALENDAR CAN'T BE OPENED AT ALL WHILE DISABLED
+                    behavior: ['allowOpenNoAction', 'blockOpen'].includes(disable?.behavior) ? disable.behavior : 'allowOpenNoAction',
+                    message: this.validatorHandle.validateString(disable?.message, ''),
+                    spinner: {
+                        show: this.validatorHandle.validateBoolean(disable?.spinner?.show, true),
+                        color: this.validatorHandle.validateString(disable?.spinner?.color, null),
+                    },
+                    overlay: {
+                        color: this.validatorHandle.validateString(disable?.overlay?.color, null),
+                    },
+                },
+                // THIS CALENDAR INSTANCE'S OWN MONTH/WEEKDAY NAMES AND "TODAY" LABEL (NOT SHARED ACROSS INSTANCES)
+                language,
                 // PROCESS AND RESOLVE ALL THE LIMITS BEFORE INITIALIZING THE CALENDAR
                 processedLimits,
                 openCalendar,
@@ -120,6 +146,7 @@ class Calendar_Controller {
                 },
                 navigation: {
                     activeArrows: this.validatorHandle.validateBoolean(navigation?.activeArrows, true),
+                    respectMonthLimits: this.validatorHandle.validateBoolean(navigation?.respectMonthLimits, false),
                 },
                 cursorEffect: this.validatorHandle.validateBoolean(cursorEffect, true),
                 style: {
@@ -151,14 +178,31 @@ class Calendar_Controller {
                     displayDateAfterClick: this.validatorHandle.validateBoolean(day?.displayDateAfterClick, true),
                     onClickDay: this.validatorHandle.validateFunction(day?.onClickDay),
                     myClass: this.validatorHandle.validateString(day?.myClass, ''),
+                    rangeSelect: this.validatorHandle.validateBoolean(day?.rangeSelect, false),
+                    rangeMinDays: this.validatorHandle.validateInteger(day?.rangeMinDays, null),
+                    rangeStepDays: this.validatorHandle.validateInteger(day?.rangeStepDays, this.validatorHandle.validateInteger(day?.rangeMinDays, null)),
+                    onRangeSelect: this.validatorHandle.validateFunction(day?.onRangeSelect),
                     // HIDDEN VALUES (NOT FROM CONFIG)
                     handler: {
                         previousDay: null,
                         currentDay: null,
                         activeDate: null,
+                        rangeStart: null,
+                        rangeEnd: null,
+                        rangeState: 'idle',
                     },
                 },
             }
+
+            // INSTANCE-STYLE CONVENIENCE METHODS - PURE DELEGATION TO THE CONTROLLER METHODS OF THE SAME NAME,
+            // SO `cal.disableCalendar()` AND `calendarController.disableCalendar(cal.id)` ARE EQUIVALENT.
+            // NAMED TO MATCH THE CONTROLLER METHODS EXACTLY (NOT E.G. `disable`) TO AVOID COLLIDING WITH THE
+            // EXISTING `config.disable` SETTINGS SUB-OBJECT ({behavior, message, spinner, overlay})
+            config.disableCalendar = (options) => this.disableCalendar(config.id, options);
+            config.enableCalendar = () => this.enableCalendar(config.id);
+            config.setOpenCalendar = (date) => this.setOpenCalendar(config.id, date);
+            config.updateYearLimits = (year) => this.updateYearLimits(config.id, year);
+            config.destroyCalendar = () => this.destroyCalendar(config.id);
 
             this.savedData.push({ id: config.id, data: [] });
             this.configurations.push(config);
@@ -181,6 +225,104 @@ class Calendar_Controller {
         if (this.validatorHandle.validateIfInputIsAcceptable(config)) {
             this.domManager.createOrUpdateInputCalendar(config);
         }
+    }
+
+    // RESET AN UNFINISHED RANGE SELECTION - JUMPING THE VIEW OR CHANGING LIMITS INVALIDATES ITS CONTEXT
+    // (A COMPLETED RANGE IS LEFT UNTOUCHED - THAT'S A CONFIRMED USER CHOICE, NOT IN-PROGRESS STATE)
+    resetInProgressRangeIfAny(config) {
+        if (config.day.handler.rangeState === 'selecting') {
+            config.day.handler.rangeState = 'idle';
+            config.day.handler.rangeStart = null;
+        }
+    }
+
+    // PROGRAMMATICALLY NAVIGATE AN ALREADY-RENDERED CALENDAR TO A SPECIFIC MONTH/YEAR
+    setOpenCalendar(id, date) {
+        const config = this.configManager.getConfigById(id);
+        if (!config) {
+            console.error(`VFZ_Calendar: No calendar found with ID '${id}'`);
+            return;
+        }
+
+        let newDate = this.validatorHandle.validateDate(date, config.openCalendar);
+        newDate = this.configManager.modifyOpenCalendarIfNeedItAfterLimits(config.processedLimits, newDate);
+        config.openCalendar = newDate;
+
+        this.resetInProgressRangeIfAny(config);
+
+        this.eventHandler.rerenderMonthAndHeader(config);
+    }
+
+    // UPDATE THE YEAR/MONTH/DAY LIMITS OF AN ALREADY-RENDERED CALENDAR (E.G. A LINKED START/END-DATE PICKER PAIR)
+    updateYearLimits(id, year) {
+        const config = this.configManager.getConfigById(id);
+        if (!config) {
+            console.error(`VFZ_Calendar: No calendar found with ID '${id}'`);
+            return;
+        }
+
+        const [processedLimits, openCalendar] = this.configManager.processConfigLimits({ openCalendar: config.openCalendar, year, month: null, day: null });
+        config.processedLimits = processedLimits;
+        config.openCalendar = openCalendar;
+
+        this.resetInProgressRangeIfAny(config);
+
+        this.eventHandler.rerenderMonthAndHeader(config);
+        this.domManager.rebuildYearsPicker(config);
+    }
+
+    // PAUSE INTERACTION ON AN ALREADY-RENDERED CALENDAR (E.G. WHILE AN ASYNC SAVE IS IN FLIGHT)
+    // options.showLoader (default true) TOGGLES THE VISUAL SPINNER OVERLAY - INTERACTION IS BLOCKED EITHER WAY
+    disableCalendar(id, options = {}) {
+        const config = this.configManager.getConfigById(id);
+        if (!config) {
+            console.error(`VFZ_Calendar: No calendar found with ID '${id}'`);
+            return;
+        }
+
+        config.disabled = true;
+        this.domManager.setLoaderVisible(config, this.validatorHandle.validateBoolean(options.showLoader, true));
+    }
+
+    enableCalendar(id) {
+        const config = this.configManager.getConfigById(id);
+        if (!config) {
+            console.error(`VFZ_Calendar: No calendar found with ID '${id}'`);
+            return;
+        }
+
+        config.disabled = false;
+        this.domManager.setLoaderVisible(config, false);
+    }
+
+    // PERMANENTLY TEARS DOWN A CALENDAR: REMOVES ITS DOM, LISTENERS, AND TRACKED STATE.
+    // THE SHARED mobileLayerWrap IS DELIBERATELY LEFT ALONE - OTHER CALENDARS MAY STILL USE IT.
+    // THE ATTACHED INPUT IS FREED (FLAG CLASS + readOnly/disabled RESET) SO IT CAN BE RE-ATTACHED AFTERWARD.
+    destroyCalendar(id) {
+        const config = this.configManager.getConfigById(id);
+        if (!config) {
+            console.error(`VFZ_Calendar: No calendar found with ID '${id}'`);
+            return;
+        }
+
+        this.eventHandler.removePreviousCalendarEventListeners(config);
+
+        if (config.coreElements?.calendarWrap) {
+            config.coreElements.calendarWrap.remove();
+        }
+
+        const input = config.inputToAttach;
+        input.classList.remove(this.flagClassToAvoidDuplicates);
+        const tagName = input.tagName.toLowerCase();
+        if (tagName === 'input' || tagName === 'textarea') {
+            input.readOnly = false;
+        }
+        else if (tagName === 'select' || tagName === 'button') {
+            input.disabled = false;
+        }
+
+        this.configurations = this.configurations.filter(c => c.id !== id);
+        this.savedData = this.savedData.filter(d => d.id !== id);
     }
 
 
@@ -212,4 +354,39 @@ class Calendar_Controller {
             document.addEventListener('DOMContentLoaded', resolve);
         }
     });
+}
+
+// PUBLIC ENTRY POINT - THE ONLY THING CONSUMERS SHOULD TOUCH
+{
+    window.ZembiS_Calendar = class {
+        #controller;
+
+        constructor(config) {
+            this.#controller = new Calendar_Controller();
+        }
+
+        renderCalendar(config) {
+            return this.#controller.createCalendar(config);
+        }
+
+        disableCalendar(id, options) {
+            return this.#controller.disableCalendar(id, options);
+        }
+
+        enableCalendar(id) {
+            return this.#controller.enableCalendar(id);
+        }
+
+        setOpenCalendar(id, date) {
+            return this.#controller.setOpenCalendar(id, date);
+        }
+
+        updateYearLimits(id, year) {
+            return this.#controller.updateYearLimits(id, year);
+        }
+
+        destroyCalendar(id) {
+            return this.#controller.destroyCalendar(id);
+        }
+    }
 }

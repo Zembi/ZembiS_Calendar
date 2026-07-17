@@ -59,7 +59,6 @@ class ConfigManager {
         // ITERATE THROUGH EACH YEAR AND PROCESS MONTH AND DAY LIMITS
         for (let y = finalMinYear; y <= finalMaxYear; y++) {
             const yearLimits = year?.limits?.[y];
-            if (!yearLimits && !year?.yearLimits) continue;
 
             // MONTH LIMITS FOR THE SPECIFIC YEAR OR FALLBACK TO GLOBAL MONTH LIMITS
             const globalMonthLimits = this.controller.validatorHandle.validateMonthRange(year?.globalLimits?.months) || [0, 11]; // DEFAULT: ALLOW ALL MONTHS
@@ -190,6 +189,7 @@ class ConfigManager {
         let currentYear = currentDate.getFullYear();
 
         const limits = config.processedLimits;
+        const respectMonthLimits = config.navigation.respectMonthLimits;
 
         // CHECK FOR PREVIOUS MONTH AVAILABILITY
         let prevMonth = currentMonth - 1;
@@ -202,6 +202,10 @@ class ConfigManager {
 
         // CHECK LIMITS FOR PREVIOUS MONTH/YEAR
         let prevAvailable = !(!limits.years[prevYear] || prevYear < limits.minYear);
+        if (prevAvailable && respectMonthLimits) {
+            const { minMonth, maxMonth } = limits.years[prevYear].months;
+            prevAvailable = prevMonth >= minMonth && prevMonth <= maxMonth;
+        }
 
         // CHECK FOR NEXT MONTH AVAILABILITY
         let nextMonth = currentMonth + 1;
@@ -214,6 +218,10 @@ class ConfigManager {
 
         // CHECK LIMITS FOR NEXT MONTH/YEAR
         let nextAvailable = !(!limits.years[nextYear] || nextYear > limits.maxYear);
+        if (nextAvailable && respectMonthLimits) {
+            const { minMonth, maxMonth } = limits.years[nextYear].months;
+            nextAvailable = nextMonth >= minMonth && nextMonth <= maxMonth;
+        }
 
         this.controller.domManager.updateNavArrowsVisibility(config, prevAvailable, nextAvailable);
     }

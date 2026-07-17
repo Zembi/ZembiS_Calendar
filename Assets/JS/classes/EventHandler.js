@@ -74,6 +74,12 @@ class EventHandler {
             const isInsideCalendar = config.coreElements.calendarWrap.contains(event.target);
 
             if (isTargetInput) {
+                // ONLY THE 'blockOpen' BEHAVIOR PREVENTS OPENING WHILE DISABLED - THE DEFAULT 'allowOpenNoAction'
+                // STILL OPENS THE CALENDAR (SHOWING THE LOADER OVERLAY), IT JUST BLOCKS NAV/YEAR/DAY ACTIONS.
+                // "CLICK OUTSIDE CLOSES" BELOW STAYS UNGUARDED EITHER WAY, SO AN ALREADY-OPEN CALENDAR CAN
+                // ALWAYS BE DISMISSED WHILE DISABLED, RATHER THAN TRAPPING THE UI
+                if (config.disabled && config.disable.behavior === 'blockOpen') return;
+
                 if (targetInput.tagName.toLowerCase() == 'select') {
                     this.initSelectActionsOnOpenCloseCalendar(targetInput);
                 }
@@ -129,6 +135,12 @@ class EventHandler {
                 // console.log(config.functionsHandler);
                 config.functionsHandler._calendarClickHandler = null;
             }
+            
+            if (config.functionsHandler._calendarResizeHandler) {
+                document.removeEventListener('resize', config.functionsHandler._calendarResizeHandler);
+                // console.log(config.functionsHandler);
+                config.functionsHandler._calendarResizeHandler = null;
+            }
         }
     }
 
@@ -148,6 +160,12 @@ class EventHandler {
 
         document.addEventListener('click', (event) => {
             this.clickEventsDelegation(event);
+        });
+
+        ['mouseover', 'mouseout'].forEach(type => {
+            document.addEventListener(type, (event) => {
+                this.hoverEventsDelegation(event);
+            });
         });
 
         Calendar_Controller.domReadyPromise.then(() => {
@@ -176,6 +194,10 @@ class EventHandler {
         const clickedEl = event.target.closest(`.input_${this.controller.ccn}_outer_wrap`);
         if (!clickedEl) return;
 
+        // BLOCKS ARROW-NAV/YEAR-NAV/YEAR-SELECT/DAY-SELECT ALL AT ONCE WHILE disableCalendar() IS ACTIVE
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+        if (config?.disabled) return;
+
         // EVENT LISTENERS FOR NAVIGATING MONTHS
         this.handlerClickArrowsNav(clickedEl, event);
         // EVENT LISTENERS FOR NAVIGATING TO YEARS
@@ -184,6 +206,69 @@ class EventHandler {
         this.handlerClickYear(clickedEl, event);
         // EVENT LISTENERS FOR SELECTING DAYS
         this.handlerClickDay(event);
+    }
+
+    // DELEGATED HOVER LISTENER - ONLY DOES WORK FOR CALENDARS MID RANGE-SELECTION (rangeState === 'selecting')
+    hoverEventsDelegation(event) {
+        const clickedEl = event.target.closest(`.input_${this.controller.ccn}_outer_wrap`);
+        if (!clickedEl) return;
+        this.handlerHoverDay(clickedEl, event);
+    }
+
+    handlerHoverDay(clickedEl, event) {
+        const ccn = this.controller.ccn;
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+        if (!config || config.disabled || !config.day.rangeSelect || config.day.handler.rangeState !== 'selecting') return;
+
+        if (event.type === 'mouseout') {
+            const stillInsideCalendar = event.relatedTarget && clickedEl.contains(event.relatedTarget);
+            if (!stillInsideCalendar) this.clearRangePreview(config);
+            return;
+        }
+
+        const hoveredDayEl = event.target.closest(`.${ccn}_day`);
+        if (!hoveredDayEl || hoveredDayEl.getAttribute('data-day') === '-1') return;
+
+        const fullDateStr = hoveredDayEl.getAttribute('data-full-date');
+        if (!fullDateStr) return;
+
+        const dm = this.controller.dateManager;
+        const hoveredDate = dm.parseFullDateAttrString(fullDateStr);
+        const previewEnd = dm.getEffectiveRangeEnd(config, config.day.handler.rangeStart, hoveredDate);
+
+        this.applyRangePreview(config, previewEnd);
+    }
+
+    clearRangePreview(config) {
+        const ccn = this.controller.ccn;
+        const monthBody = document.querySelector(`#${config.id} .${ccn}_month_body`);
+        if (!monthBody) return;
+
+        monthBody.querySelectorAll(`.${ccn}_in_range_day, .${ccn}_range_start_day, .${ccn}_range_end_day`).forEach(el => {
+            el.classList.remove(`${ccn}_in_range_day`, `${ccn}_range_start_day`, `${ccn}_range_end_day`);
+        });
+    }
+
+    applyRangePreview(config, previewEnd) {
+        const ccn = this.controller.ccn;
+        const dm = this.controller.dateManager;
+        const monthBody = document.querySelector(`#${config.id} .${ccn}_month_body`);
+        if (!monthBody) return;
+
+        monthBody.querySelectorAll(`.${ccn}_day`).forEach(dayEl => {
+            if (dayEl.getAttribute('data-day') === '-1') return;
+
+            const fullDateStr = dayEl.getAttribute('data-full-date');
+            if (!fullDateStr) return;
+
+            const dayDate = dm.parseFullDateAttrString(fullDateStr);
+            const desc = dm.getRangeDescriptorForDate(config, dayDate, previewEnd);
+
+            dayEl.classList.remove(`${ccn}_in_range_day`, `${ccn}_range_start_day`, `${ccn}_range_end_day`);
+            if (desc.inRange) dayEl.classList.add(`${ccn}_in_range_day`);
+            if (desc.isStart) dayEl.classList.add(`${ccn}_range_start_day`);
+            if (desc.isEnd) dayEl.classList.add(`${ccn}_range_end_day`);
+        });
     }
 
     // CORE EVENT LISTENER FOR NAVIGATING MONTHS
@@ -211,11 +296,22 @@ class EventHandler {
         // ENSURE THE YEAR STAYS WITHIN THE PROCESSED LIMITS
         if (newYear < limits.minYear || newYear > limits.maxYear) return;
 
+        // OPTIONALLY ENSURE THE MONTH STAYS WITHIN THAT YEAR'S PROCESSED LIMITS
+        if (config.navigation.respectMonthLimits) {
+            const yearLimits = limits.years[newYear];
+            if (!yearLimits || newMonth < yearLimits.months.minMonth || newMonth > yearLimits.months.maxMonth) return;
+        }
+
         // PROCEED TO UPDATE THE CALENDAR WITH THE NEW MONTH
         const newDate = new Date(newYear, newMonth);
         config.openCalendar = newDate;  // UPDATE THE CALENDAR WITH THE NEW DATE
 
-        // UPDATE VIEW AND RE-RENDER DAYS FOR THE NEW MONTH
+        this.rerenderMonthAndHeader(config);
+    }
+
+    // TARGETED RE-RENDER OF THE HEADER + DAY-GRID FOR WHATEVER config.openCalendar CURRENTLY IS -
+    // REUSED BY navigateMonth AND BY THE PROGRAMMATIC NAVIGATION/LIMITS-UPDATE PUBLIC FUNCTIONS
+    rerenderMonthAndHeader(config) {
         this.removeDayEventListener(config);
 
         const ccn = this.controller.ccn;
@@ -252,7 +348,7 @@ class EventHandler {
         // ALWAYS SCROLL INTO CURRENT CHOSEN YEAR VIEW
         yearsWrap.classList.toggle(`${ccn}_close_status`);
         // IF RENDER, SCROLL INTO VIEW
-        if (!yearsWrap.classList.contains(`.${ccn}_close_status`)) {
+        if (!yearsWrap.classList.contains(`${ccn}_close_status`)) {
             requestAnimationFrame(() => {
                 const yearsWrapHeight = yearsWrap.clientHeight;
                 const currentYearElHeight = currentYearEl.clientHeight;
@@ -311,6 +407,11 @@ class EventHandler {
         if (pickedNumDay && parseInt(pickedNumDay, 10) !== -1) {
             const config = this.controller.configManager.getConfigFromClickedEl(clickedEl);
 
+            if (config.day.rangeSelect) {
+                this.handlerClickDayRangeMode(clickedEl, config);
+                return;
+            }
+
             if (config.day.handler.currentDay !== clickedEl.getAttribute('data-day')) {
                 // CORE FUNCTIONALITY
                 this.onClickDayAction(clickedEl, config);
@@ -321,6 +422,46 @@ class EventHandler {
                     this.onClickDayAction(clickedEl, config);
                 }
             }
+        }
+    }
+
+    // CORE EVENT LOGIC FOR RANGE-SELECT MODE: 1ST CLICK STARTS/RESTARTS A RANGE, 2ND CLICK FINALIZES IT
+    handlerClickDayRangeMode(clickedEl, config) {
+        const dm = this.controller.dateManager;
+        const handler = config.day.handler;
+        const clickedDate = dm.parseFullDateAttrString(clickedEl.getAttribute('data-full-date'));
+
+        if (handler.rangeState !== 'selecting') {
+            // IDLE OR COMPLETE -> (RE)START A FRESH RANGE (COVERS "3RD CLICK DISCARDS THE OLD RANGE")
+            handler.rangeStart = clickedDate;
+            handler.rangeEnd = null;
+            handler.rangeState = 'selecting';
+            // TARGETED CLASS UPDATE ONLY - NEVER REPLACE THE DOM HERE, IT WOULD DETACH clickedEl (== event.target)
+            // BEFORE THE SEPARATE "CLICK OUTSIDE CLOSES THE CALENDAR" LISTENER RUNS FOR THIS SAME CLICK EVENT,
+            // MAKING IT WRONGLY THINK THE CLICK WAS OUTSIDE THE CALENDAR AND CLOSE IT
+            this.applyRangePreview(config, null);
+            return;
+        }
+
+        // SECOND CLICK -> FINALIZE, SNAPPED TO A VALID LENGTH AND TRUNCATED AT ANY DISABLED-DAY BOUNDARY
+        const effectiveEnd = dm.getEffectiveRangeEnd(config, handler.rangeStart, clickedDate);
+        const [lo, hi] = dm.sortDates(handler.rangeStart, effectiveEnd);
+        handler.rangeStart = lo;
+        handler.rangeEnd = hi;
+        handler.rangeState = 'complete';
+
+        this.applyRangePreview(config, null);
+
+        const [startStr, endStr, rangeInfo] = dm.rangeClickCoreFunctionality(config, lo, hi);
+        if (config.day.onRangeSelect) {
+            config.day.onRangeSelect(startStr, endStr, rangeInfo, clickedEl, config.inputToAttach);
+        }
+
+        // CLOSE CALENDAR ON RANGE COMPLETE, IF OPTION IS ACTIVE
+        if (config.day.closeOnClickDay) {
+            setTimeout(() => {
+                this.controller.domManager.closeAllCoreElements(config);
+            }, 100);
         }
     }
 
@@ -367,10 +508,10 @@ class EventHandler {
         if (!cursorEl) return;
 
         cursorEl.style.opacity = '0';
-        cursorEl.style.visibiliy = 'hidden';
+        cursorEl.style.visibility = 'hidden';
         if (!yearContainerEl) return;
         cursorEl.style.opacity = '0.8';
-        cursorEl.style.visibiliy = 'visible';
+        cursorEl.style.visibility = 'visible';
 
 
         const { top, left } = yearContainerEl.getBoundingClientRect();

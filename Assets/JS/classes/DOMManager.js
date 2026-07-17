@@ -85,22 +85,26 @@ class DOMManager {
         }
 
         // STEP 7: CREATE MOBILE OVERLAY FOR THE CALENDAR (IF NECESSARY)
-        let mobileLayerWrap = document.querySelector(`${this.controller.ccn}_overlay_for_mobile`);
+        let mobileLayerWrap = document.querySelector(`.${this.controller.ccn}_overlay_for_mobile`);
         if (!mobileLayerWrap) {
             mobileLayerWrap = this.createMobileOverlay();
         }
 
-        // STEP 8: ATTACH ALL CORE ELEMENTS TO THE CONFIG OBJECT
+        // STEP 8: CREATE THE LOADER OVERLAY (HIDDEN BY DEFAULT, TOGGLED VIA disableCalendar()/enableCalendar())
+        const loaderOverlay = this.createLoaderOverlay(config, outerWrap);
+
+        // STEP 9: ATTACH ALL CORE ELEMENTS TO THE CONFIG OBJECT
         config.coreElements = {
             calendarWrap: outerWrap,
             calendarInnerWrap: wraps[0],
             helperBody,
             yearsWrap,
             followCursor: followCursorEl,
-            mobileLayerWrap
+            mobileLayerWrap,
+            loaderOverlay
         };
 
-        // STEP 9: APPLY STYLES AND EVENT HANDLERS TO THE CALENDAR
+        // STEP 10: APPLY STYLES AND EVENT HANDLERS TO THE CALENDAR
         this.prepareCssForThisCalendarFromConfig(config);
         this.controller.eventHandler.handleInputsBehaviorWithCalendarElement(config);
     }
@@ -201,12 +205,65 @@ class DOMManager {
         return cursor;
     }
 
+    // REBUILDS THE YEAR-PICKER LIST AFTER processedLimits CHANGES (E.G. updateYearLimits) - createAllYearChoices
+    // ONLY EVER APPENDS, SO THE OLD CONTAINER MUST BE CLEARED FIRST OR THE OLD/NEW YEAR LISTS WOULD BOTH SHOW
+    rebuildYearsPicker(config) {
+        const yearsWrap = config.coreElements?.yearsWrap;
+        if (!yearsWrap) return;
+
+        yearsWrap.innerHTML = '';
+        config.coreElements.followCursor = this.createAllYearChoices(config, yearsWrap);
+    }
+
     createMobileOverlay() {
         const mobileLayerWrap = document.createElement('div');
         mobileLayerWrap.className = `${this.controller.ccn}_overlay_for_mobile`;
         document.body.appendChild(mobileLayerWrap);
         this.closeElement(mobileLayerWrap);
         return mobileLayerWrap;
+    }
+
+    // COVERS THE WHOLE CALENDAR (HEADER, DAY-GRID, YEAR-PICKER, HELPER ROW) WHILE disableCalendar() IS ACTIVE.
+    // CREATED ONCE, HIDDEN BY DEFAULT VIA CSS, JUST TOGGLED VISIBLE/HIDDEN AFTERWARDS (NO RE-CREATION)
+    createLoaderOverlay(config, outerWrap) {
+        const ccn = this.controller.ccn;
+        const loaderOverlay = document.createElement('div');
+        loaderOverlay.className = `${ccn}_loader_overlay`;
+
+        if (config.disable.overlay.color) {
+            loaderOverlay.style.backgroundColor = config.disable.overlay.color;
+        }
+
+        if (config.disable.spinner.show) {
+            const spinner = document.createElement('span');
+            spinner.className = `${ccn}_spinner`;
+            if (config.disable.spinner.color) {
+                spinner.style.borderTopColor = config.disable.spinner.color;
+            }
+            loaderOverlay.appendChild(spinner);
+        }
+
+        if (config.disable.message) {
+            const message = document.createElement('span');
+            message.className = `${ccn}_loader_message`;
+            message.textContent = config.disable.message;
+            loaderOverlay.appendChild(message);
+        }
+
+        outerWrap.appendChild(loaderOverlay);
+        return loaderOverlay;
+    }
+
+    setLoaderVisible(config, visible) {
+        const loaderOverlay = config.coreElements?.loaderOverlay;
+        if (!loaderOverlay) return;
+
+        const activeClass = `${this.controller.ccn}_loader_active`;
+        if (visible) {
+            loaderOverlay.classList.add(activeClass);
+        } else {
+            loaderOverlay.classList.remove(activeClass);
+        }
     }
 
     createMonthBodyWrapper(wrap) {
@@ -246,7 +303,7 @@ class DOMManager {
             this.createNavigationButtons(config, leftArrowParent, rightArrowParent);
         }
 
-        this.createStaticWeekDaysHeaderOfMonth(wrap);
+        this.createStaticWeekDaysHeaderOfMonth(config, wrap);
     }
 
     createNavigationButtons(config, parentLeftArrow, parentRightArrow) {
@@ -280,7 +337,7 @@ class DOMManager {
         }
 
         const monthIndex = config.openCalendar.getMonth();
-        const month = this.controller.dateManager.months[monthIndex];
+        const month = config.language.months[monthIndex];
         const year = config.openCalendar.getFullYear();
 
         config.year.handler.activeYear = year;
@@ -296,7 +353,7 @@ class DOMManager {
         `;
     }
 
-    createStaticWeekDaysHeaderOfMonth(parentEl) {
+    createStaticWeekDaysHeaderOfMonth(config, parentEl) {
         const ccn = this.controller.ccn;
         const monthHeader = document.createElement('div');
         monthHeader.className = `${ccn}_month_header`;
@@ -304,7 +361,7 @@ class DOMManager {
 
         let htmlForMonthHeader = '';
         for (let weekDay = 0; weekDay < 7; weekDay++) {
-            const weekDayStr = this.controller.dateManager.weekDays[weekDay];
+            const weekDayStr = config.language.weekDays[weekDay];
             let weekDaysDisplayed = weekDayStr.substring(0, 2);
             weekDaysDisplayed = this.controller.configManager.removeGreekTones(weekDaysDisplayed);
 
@@ -333,11 +390,7 @@ class DOMManager {
         const customClasses = this.controller.configManager.getCustomDayClasses(config);
 
         const ccn = this.controller.ccn;
-        config.day.handler.previousDay = null;
-        config.day.handler.currentDay = null;
         for (let day = 1; day <= countDays; day++) {
-            config.day.handler.currentDay = day;
-
             const currDay = new Date(`${year}-${month + 1}-${day}`);
             const currentMonthCheck = this.controller.dateManager.compareTwoDates(currDay, new Date());
             let currentDayClass = '';
@@ -365,8 +418,17 @@ class DOMManager {
                 restData = `aria-checked="false"`;
             }
 
+            let rangeClass = '';
+            if (config.day.rangeSelect) {
+                const rangeDesc = this.controller.dateManager.getRangeDescriptorForDate(config, currDay);
+                if (rangeDesc.inRange) rangeClass += ` ${ccn}_in_range_day`;
+                if (rangeDesc.isStart) rangeClass += ` ${ccn}_range_start_day`;
+                if (rangeDesc.isEnd) rangeClass += ` ${ccn}_range_end_day`;
+            }
+
             const formattedDate = this.controller.dateManager.formatDate(config, day, month, year);
-            data = `class="${ccn}_day ${clickableClassData}${customClasses}${currentDayClass}" data-day="${day}" data-date="${formattedDate}" aria-label="${day} ${this.controller.dateManager.monthsForUse[month]} ${year}" ${restData}`;
+            const fullDateAttr = this.controller.dateManager.formatFullDateAttrString(currDay);
+            data = `class="${ccn}_day ${clickableClassData}${customClasses}${currentDayClass}${rangeClass}" data-day="${day}" data-date="${formattedDate}" data-full-date="${fullDateAttr}" aria-label="${day} ${this.controller.dateManager.monthsForUse[month]} ${year}" ${restData}`;
 
             htmlForMonthBody += `
                 <span ${data} >
@@ -422,7 +484,7 @@ class DOMManager {
 
         const buttonToToday = document.createElement('span');
         buttonToToday.classList.add(`${this.controller.ccn}_today_button`);
-        buttonToToday.innerText = this.controller.dateManager.buttons.currentDate;
+        buttonToToday.innerText = config.language.todayButtonText;
         wrapButtonToToday.appendChild(buttonToToday);
     }
 
@@ -498,10 +560,20 @@ class DOMManager {
             use_or_not_fade += '"';
 
             let currentDayClass = '';
-            if (currentMonthCheck) currentDayClass += ` ${ccn}_current_day`;
+            if (currentMonthCheck) currentDayClass += ` ${this.controller.ccn}_current_day`;
             if (!availableDay) currentDayClass += ` ${this.controller.ccn}_disabled_day`;
 
-            html += `<span class="${this.controller.ccn}_day${custom_class} ${currentDayClass} outofbound" data-day="${data_day}" data-date="${data_date}" ${use_or_not_fade}}>${view_data_day}</span>`;
+            let rangeClass = '';
+            if (config.day.rangeSelect) {
+                const rangeDesc = this.controller.dateManager.getRangeDescriptorForDate(config, currDay);
+                if (rangeDesc.inRange) rangeClass += ` ${this.controller.ccn}_in_range_day`;
+                if (rangeDesc.isStart) rangeClass += ` ${this.controller.ccn}_range_start_day`;
+                if (rangeDesc.isEnd) rangeClass += ` ${this.controller.ccn}_range_end_day`;
+            }
+
+            const fullDateAttr = this.controller.dateManager.formatFullDateAttrString(currDay);
+
+            html += `<span class="${this.controller.ccn}_day${custom_class} ${currentDayClass}${rangeClass} outofbound" data-day="${data_day}" data-date="${data_date}" data-full-date="${fullDateAttr}" ${use_or_not_fade}>${view_data_day}</span>`;
             c--;
         }
         return html;

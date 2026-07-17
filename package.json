@@ -1,0 +1,9 @@
+{
+    "name": "zembis-calendar",
+    "version": "1.2.0",
+    "private": true,
+    "description": "Vanilla JS calendar/date-picker widget, distributed as a single bundled script.",
+      "scripts": {
+        "build": "node build.js"
+    }
+}

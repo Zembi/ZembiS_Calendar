@@ -2,16 +2,9 @@ class DateManager {
     constructor(controller) {
         this.controller = controller;
 
-        this.months = [];
         this.monthsForUse = [
             'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'
         ];
-
-        this.weekDays = [];
-
-        this.buttons = {
-            currentDate: null
-        };
     }
 
     getCurrentDay(d, m, y) {
@@ -45,25 +38,154 @@ class DateManager {
             date1.getDate() === date2.getDate();
     }
 
-    clickDayCoreFunctionality(clickedEl, config) {
+    // RANGE-SELECTION HELPERS
+
+    dateToComparableNumber(date) {
+        return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+    }
+
+    sortDates(dateA, dateB) {
+        return this.dateToComparableNumber(dateA) <= this.dateToComparableNumber(dateB) ? [dateA, dateB] : [dateB, dateA];
+    }
+
+    isDateBetween(date, boundA, boundB) {
+        const [lo, hi] = this.sortDates(boundA, boundB);
+        const value = this.dateToComparableNumber(date);
+        return value >= this.dateToComparableNumber(lo) && value <= this.dateToComparableNumber(hi);
+    }
+
+    // SIGNED WHOLE-CALENDAR-DAY DIFFERENCE (dateB - dateA)
+    daysBetween(dateA, dateB) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        return Math.round((dateB.getTime() - dateA.getTime()) / msPerDay);
+    }
+
+    // FLOORS rawLength DOWN TO THE NEAREST VALID INCREMENT (minDays, minDays+step, minDays+2*step, ...)
+    snapToValidRangeLength(rawLength, minDays, stepDays) {
+        if (!minDays) return rawLength;
+        if (rawLength <= minDays) return minDays;
+        const step = stepDays || minDays;
+        return minDays + step * Math.floor((rawLength - minDays) / step);
+    }
+
+    // WALKS DAY-BY-DAY FROM startDate TOWARD targetDate (SNAPPED TO A VALID LENGTH IF day.rangeMinDays IS SET),
+    // STOPPING AT THE LAST DAY BEFORE THE FIRST DISABLED ONE. RE-SNAPS DOWN IF DISABLED-DAY TRUNCATION CUTS SHORT.
+    getEffectiveRangeEnd(config, startDate, targetDate) {
+        const minDays = config.day.rangeMinDays;
+        const stepDays = config.day.rangeStepDays;
+
+        const direction = this.dateToComparableNumber(targetDate) >= this.dateToComparableNumber(startDate) ? 1 : -1;
+
+        let desiredEnd = targetDate;
+        if (minDays) {
+            const rawLength = Math.abs(this.daysBetween(startDate, targetDate)) + 1;
+            const snappedLength = this.snapToValidRangeLength(rawLength, minDays, stepDays);
+            desiredEnd = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + direction * (snappedLength - 1));
+        }
+
+        let lastValidDate = startDate;
+        let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + direction);
+
+        while (direction > 0 ? this.dateToComparableNumber(cursor) <= this.dateToComparableNumber(desiredEnd) : this.dateToComparableNumber(cursor) >= this.dateToComparableNumber(desiredEnd)) {
+            if (!this.controller.validatorHandle.validateDateConsideringProccessedLimits(cursor, config.processedLimits)) break;
+
+            lastValidDate = cursor;
+            cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + direction);
+        }
+
+        if (minDays) {
+            const truncatedLength = Math.abs(this.daysBetween(startDate, lastValidDate)) + 1;
+            if (truncatedLength < minDays) return startDate;
+
+            const refittedLength = Math.min(this.snapToValidRangeLength(truncatedLength, minDays, stepDays), truncatedLength);
+            return new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + direction * (refittedLength - 1));
+        }
+
+        return lastValidDate;
+    }
+
+    // SINGLE SOURCE OF TRUTH FOR "WHAT RANGE STATE DOES THIS DAY HAVE" - USED BY BOTH RENDER AND LIVE HOVER
+    getRangeDescriptorForDate(config, date, previewEnd = null) {
+        const handler = config.day.handler;
+        const start = handler.rangeStart;
+        if (!config.day.rangeSelect || !start) {
+            return { inRange: false, isStart: false, isEnd: false };
+        }
+
+        let end = null;
+        if (handler.rangeState === 'complete') {
+            end = handler.rangeEnd;
+        }
+        else if (handler.rangeState === 'selecting' && previewEnd) {
+            end = previewEnd;
+        }
+
+        if (!end) {
+            const isStartOnly = this.compareTwoDates(date, start);
+            return { inRange: isStartOnly, isStart: isStartOnly, isEnd: false };
+        }
+
+        const [lo, hi] = this.sortDates(start, end);
+        const inRange = this.isDateBetween(date, lo, hi);
+        return {
+            inRange,
+            isStart: inRange && this.compareTwoDates(date, lo),
+            isEnd: inRange && this.compareTwoDates(date, hi),
+        };
+    }
+
+    formatFullDateAttrString(date) {
+        const yyyy = String(date.getFullYear());
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    parseFullDateAttrString(str) {
+        const [y, m, d] = str.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
+    writeValueToAttachedElement(config, valueString) {
         const element = config.inputToAttach;
         const typeOfInput = element.tagName.toLowerCase();
+
+        if (typeOfInput === 'input' || typeOfInput === 'textarea') {
+            element.value = valueString;
+        }
+        else if (typeOfInput === 'select') {
+            this.controller.eventHandler.setSelectValueQuietly(element, valueString);
+        }
+        else {
+            element.innerText = valueString;
+        }
+    }
+
+    clickDayCoreFunctionality(clickedEl, config) {
+        const element = config.inputToAttach;
         const dateValue = clickedEl.getAttribute('data-date');
 
         if (config.day.displayDateAfterClick) {
-            if (typeOfInput === 'input' || typeOfInput === 'textarea') {
-                element.value = dateValue;
-            }
-            else if (typeOfInput === 'select') {
-                this.controller.eventHandler.setSelectValueQuietly(element, dateValue);
-            }
-            else {
-                element.innerText = dateValue;
-            }
+            this.writeValueToAttachedElement(config, dateValue);
         }
         element.setAttribute('data-active-date', dateValue);
 
         this.configureActiveDay(clickedEl, config);
+    }
+
+    // RETURNS [startDateStr, endDateStr, rangeInfo] - rangeInfo CARRIES RAW Date OBJECTS + INCLUSIVE DAY COUNT
+    // FOR CONSUMERS THAT NEED TO COMPUTE PRICING/NIGHTS (E.G. BOOKING SYSTEMS) WITHOUT RE-PARSING FORMATTED STRINGS
+    rangeClickCoreFunctionality(config, startDate, endDate) {
+        const startStr = this.formatDate(config, startDate.getDate(), startDate.getMonth(), startDate.getFullYear());
+        const endStr = this.formatDate(config, endDate.getDate(), endDate.getMonth(), endDate.getFullYear());
+        const days = Math.abs(this.daysBetween(startDate, endDate)) + 1;
+
+        if (config.day.displayDateAfterClick) {
+            this.writeValueToAttachedElement(config, `${startStr} - ${endStr}`);
+        }
+
+        const rangeInfo = { startDate, endDate, days };
+        return [startStr, endStr, rangeInfo];
     }
 
     configureActiveDay(clickedEl, config) {
@@ -133,11 +255,11 @@ class DateManager {
         let currInfo = openCalendar.getMonth();
         if (currInfo < minMaxInfo[0]) {
             currInfo = minMaxInfo[0];
-            openCalendar.setMonth(minMaxInfo[0] - 1);
+            openCalendar.setMonth(minMaxInfo[0]);
         }
         else if (currInfo > minMaxInfo[1]) {
             currInfo = minMaxInfo[1];
-            openCalendar.setMonth(minMaxInfo[1] - 1);
+            openCalendar.setMonth(minMaxInfo[1]);
         }
 
         return [currInfo, openCalendar];

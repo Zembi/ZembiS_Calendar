@@ -24,6 +24,16 @@
     --calendar-active-day-color: white;
     --calendar-active-day-bg: rgb(0, 114, 9);
 
+    --calendar-range-day-color: black;
+    --calendar-range-day-bg: rgba(0, 114, 9, 0.25);
+
+    --calendar-range-endpoint-color: white;
+    --calendar-range-endpoint-bg: rgb(0, 114, 9);
+
+    --calendar-loader-overlay-bg: rgba(255, 255, 255, 0.6);
+    --calendar-loader-spinner-track: rgba(0, 0, 0, 0.15);
+    --calendar-loader-spinner-color: rgb(0, 114, 9);
+
     --calendar-active-year-color: white;
     --calendar-active-year-bg: rgb(0, 114, 9);
 
@@ -94,7 +104,7 @@
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_nav_arrow.calendar_vfz_disable_arrow {
     user-select: none !important;
     opacity: 0;
-    visibility: none;
+    visibility: hidden;
     cursor: auto !important;
 }
 
@@ -211,6 +221,31 @@
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_clickable.calendar_vfz_active_day {
     background-color: var(--calendar-active-day-bg);
     color: var(--calendar-active-day-color);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_in_range_day {
+    background-color: var(--calendar-range-day-bg);
+    color: var(--calendar-range-day-color);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_start_day,
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_end_day {
+    background-color: var(--calendar-range-endpoint-bg);
+    color: var(--calendar-range-endpoint-color);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_start_day {
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_end_day {
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_start_day.calendar_vfz_range_end_day {
+    border-radius: 12px;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_disabled_day {
@@ -367,6 +402,44 @@
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_year.calendar_vfz_active_year {
     background-color: var(--calendar-active-year-bg);
     color: var(--calendar-active-year-color);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_loader_overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background-color: var(--calendar-loader-overlay-bg);
+    z-index: 10000;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_loader_overlay.calendar_vfz_loader_active {
+    display: flex;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--calendar-loader-spinner-track);
+    border-top-color: var(--calendar-loader-spinner-color);
+    border-radius: 50%;
+    animation: calendar_vfz_spin 0.8s linear infinite;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_loader_message {
+    font-size: 14px;
+    color: var(--calendar-body-day-text-color);
+    text-align: center;
+    padding: 0 10px;
+}
+
+@keyframes calendar_vfz_spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 

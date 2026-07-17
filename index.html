@@ -6,42 +6,116 @@
     <script src="https://zembi.github.io/ZembiS_Calendar/Assets/JS/ZembiS_Calendar.js"></script> -->
     <link rel="stylesheet" href="./Assets/CSS/calendar.css">
     <meta charset="UTF-8">
-    <!-- <script src="./Assets/JS/ZembiS_Calendar.js"></script> -->
     <link rel="icon" type="image/x-icon" href="./Assets/Images/test_icon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="./Assets/CSS/style.css">
-
-    <script src="./Assets/JS/classes/Calendar_Controller.js"></script>
-    <script src="./Assets/JS/classes/EventHandler.js"></script>
-    <script src="./Assets/JS/classes/DOMManager.js"></script>
-    <script src="./Assets/JS/classes/DateManager.js"></script>
-    <script src="./Assets/JS/classes/ConfigManager.js"></script>
-    <script src="./Assets/JS/classes/ValidatorHandle.js"></script>
-
-    <script src="./Assets/JS/ZembiS_Calendar_Controller.js"></script>
-
-
-    <script src="./Assets/JS/tester.js"></script>
+    <title>ZembiS_Calendar &mdash; Test Console</title>
 </head>
 
 <body>
 
-    <form>
-        <a class="test1">12312</a>
-        <!-- <input type="date" class="test2"> -->
-        <button class="test2"></button>
-        <br>
-        <br>
-        <br>
-        <br>
-        <br>
-        <br>
-        <select type="text" class="test3">
-            <option value="01-05-2023">01-05-2023</option>
-            <option value="05-05-2023">05-05-2023</option>
-        </select>
-        <div class="test2">123</div>
-    </form>
+    <header class="console-header">
+        <p class="console-eyebrow">$ zembis-calendar --test-harness</p>
+        <h1 class="console-title">ZembiS_Calendar</h1>
+        <p class="console-subtitle">Manual verification console. Four calendars wired to different element types and
+            configs, plus three control actions you can trigger without touching a day.</p>
+        <div class="console-stats">
+            <span class="stat"><strong>4</strong> calendars</span>
+            <span class="stat"><strong>1</strong> range picker</span>
+            <span class="stat"><strong>3</strong> control actions</span>
+        </div>
+    </header>
+
+    <main class="test-grid">
+        <section class="test-card">
+            <p class="card-tag">$ .test1 &lt;a&gt;</p>
+            <h2 class="card-title">Language + custom limits</h2>
+            <p class="card-desc">French/Greek-aware labels, Monday-start week, faded previous-month days, and
+                per-year/month/day limit overrides for 2021, 2023 and 2025.</p>
+            <div class="card-badges">
+                <span class="badge">weekStartDay</span>
+                <span class="badge">extraLanguages</span>
+                <span class="badge">year.limits</span>
+                <span class="badge">displayPreviousMonth</span>
+            </div>
+            <div class="card-trigger">
+                <a class="test1" href="javascript:void(0)">Pick a date</a>
+            </div>
+        </section>
+
+        <section class="test-card">
+            <p class="card-tag">$ .test2 &lt;button&gt;</p>
+            <h2 class="card-title">Button trigger + re-clickable days</h2>
+            <p class="card-desc">Attached to a &lt;button&gt; instead of an input. Days stay re-clickable, and
+                picking one writes a custom attribute back onto the calendar element.</p>
+            <div class="card-badges">
+                <span class="badge">reClickable</span>
+                <span class="badge">closeOnClickDay</span>
+            </div>
+            <div class="card-trigger">
+                <button type="button" class="test2">Open calendar</button>
+            </div>
+        </section>
+
+        <section class="test-card">
+            <p class="card-tag">$ .test3 &lt;select&gt;</p>
+            <h2 class="card-title">Select dropdown trigger</h2>
+            <p class="card-desc">Attached to a native &lt;select&gt;. Picking a day quietly changes the selected
+                option instead of writing free text.</p>
+            <div class="card-badges">
+                <span class="badge">select element</span>
+            </div>
+            <div class="card-trigger">
+                <select class="test3">
+                    <option value="01-05-2023">01-05-2023</option>
+                    <option value="05-05-2023">05-05-2023</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="test-card">
+            <p class="card-tag">$ .test4 &lt;input&gt;</p>
+            <h2 class="card-title">Range select + disable/loader</h2>
+            <p class="card-desc">Click a day to start a range, hover to preview it (snapped to 7-day steps), click
+                again to finalize. July 2026 only allows days 10&ndash;25, to check range truncation at a disabled
+                boundary.</p>
+            <div class="card-badges">
+                <span class="badge">rangeSelect</span>
+                <span class="badge">rangeMinDays: 7</span>
+                <span class="badge">disable.behavior</span>
+            </div>
+            <div class="card-trigger">
+                <input type="text" class="test4" placeholder="Pick a range" readonly>
+            </div>
+        </section>
+    </main>
+
+    <section class="controls-card">
+        <p class="card-tag">$ manual-test-actions</p>
+        <h2 class="card-title">Control actions</h2>
+        <p class="card-desc">Calls the new targeted public functions directly &mdash; no day click required.</p>
+        <div class="controls-list">
+            <button type="button" class="control-btn test-disable-toggle-4">
+                <span class="control-name">disableCalendar / enableCalendar</span>
+                <span class="control-target">&rarr; calendar 4, 2s loader</span>
+            </button>
+            <button type="button" class="control-btn test-jump-1">
+                <span class="control-name">setOpenCalendar</span>
+                <span class="control-target">&rarr; calendar 1, jump to 2024-06-01</span>
+            </button>
+            <button type="button" class="control-btn test-shrink-limits-2">
+                <span class="control-name">updateYearLimits</span>
+                <span class="control-target">&rarr; calendar 2, shrink to 2022&ndash;2024</span>
+            </button>
+            <button type="button" class="control-btn test-destroy-3">
+                <span class="control-name">destroyCalendar</span>
+                <span class="control-target">&rarr; calendar 3, removes it for good</span>
+            </button>
+        </div>
+    </section>
+
+    <script src="./Assets/JS/ZembiS_Calendar.js"></script>
+    <script src="./Assets/JS/tester.js"></script>
 </body>
 
 </html>
