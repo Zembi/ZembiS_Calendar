@@ -5,44 +5,94 @@
 
 .input_calendar_vfz_outer_wrap {
     /* ADD MY OWN CSS */
-    --calendar-background-color: white;
-    --calendar-header-month-text-color: black;
-    --calendar-header-year-text-color: black;
-    --calendar-header-weekdays-text-color: black;
-    --calendar-header-weekdays-border-color: black;
-    --calendar-body-day-text-color: black;
-    --calendar-body-year-text-color: black;
-    --calendar-header-font-size: 22px;
-    --calendar-header-year-font-size: 20px;
-    --calendar-header-weekDays-font-size: 20px;
-    --calendar-day-font-size: 20px;
-    --calendar-year-font-size: 18px;
+    --calendar-background-color: #ffffff;
+    --calendar-card-border-color: #e5e7eb;
+    --calendar-card-border-width: 1px;
+    --calendar-card-padding: 12px;
 
-    --calendar-current-day-color: white;
-    --calendar-current-day-bg: grey;
+    --calendar-header-month-text-color: #111827;
+    --calendar-header-year-text-color: #4b5563;
+    --calendar-header-weekdays-text-color: #9ca3af;
+    --calendar-header-weekdays-border-color: #eef0f2;
 
-    --calendar-active-day-color: white;
-    --calendar-active-day-bg: rgb(0, 114, 9);
+    --calendar-body-day-text-color: #1f2937;
+    --calendar-body-year-text-color: #1f2937;
 
-    --calendar-range-day-color: black;
-    --calendar-range-day-bg: rgba(0, 114, 9, 0.25);
+    --calendar-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --calendar-font-weight-regular: 400;
+    --calendar-font-weight-medium: 500;
+    --calendar-font-weight-semibold: 600;
+    --calendar-font-weight-bold: 700;
 
-    --calendar-range-endpoint-color: white;
-    --calendar-range-endpoint-bg: rgb(0, 114, 9);
+    --calendar-header-font-size: 16px;
+    --calendar-header-year-font-size: 13px;
+    --calendar-header-weekDays-font-size: 11px;
+    --calendar-day-font-size: 13.5px;
+    --calendar-year-font-size: 14px;
 
-    --calendar-loader-overlay-bg: rgba(255, 255, 255, 0.6);
-    --calendar-loader-spinner-track: rgba(0, 0, 0, 0.15);
-    --calendar-loader-spinner-color: rgb(0, 114, 9);
+    --calendar-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
+    --calendar-shadow-md: 0 4px 10px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.05);
+    --calendar-shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.16), 0 4px 12px rgba(15, 23, 42, 0.08);
 
-    --calendar-active-year-color: white;
-    --calendar-active-year-bg: rgb(0, 114, 9);
+    --calendar-radius-sm: 6px;
+    --calendar-radius-md: 10px;
+    --calendar-radius-lg: 16px;
+    --calendar-radius-pill: 999px;
 
+    --calendar-space-1: 4px;
+    --calendar-space-2: 8px;
+    --calendar-space-3: 12px;
+    --calendar-space-4: 16px;
+    --calendar-space-5: 20px;
+    --calendar-space-6: 24px;
+
+    --calendar-arrow-size: 34px;
+
+    --calendar-slide-duration: 320ms;
+    --calendar-slide-easing: cubic-bezier(0.32, 0.72, 0, 1);
+    --calendar-fade-easing: ease;
+
+    --calendar-current-day-color: var(--calendar-accent, #0f8a3d);
+    --calendar-current-day-ring-color: var(--calendar-accent, #0f8a3d);
+
+    --calendar-accent: #0f8a3d;
+    --calendar-accent-hover: #0c7233;
+    --calendar-accent-contrast: #ffffff;
+
+    --calendar-active-day-color: #ffffff;
+    --calendar-active-day-bg: var(--calendar-accent);
+
+    --calendar-range-day-color: #111827;
+    --calendar-range-day-bg: rgba(15, 138, 61, 0.12);
+
+    --calendar-range-endpoint-color: #ffffff;
+    --calendar-range-endpoint-bg: var(--calendar-accent);
+
+    --calendar-disabled-day-color: #d1d5db;
+    --calendar-day-hover-bg: #f3f4f6;
+    --calendar-day-hover-color: inherit;
+
+    --calendar-loader-overlay-bg: rgba(255, 255, 255, 0.7);
+    --calendar-loader-spinner-track: rgba(15, 23, 42, 0.08);
+    --calendar-loader-spinner-color: var(--calendar-accent);
+
+    --calendar-active-year-color: #ffffff;
+    --calendar-active-year-bg: var(--calendar-accent);
+
+    --calendar-years-panel-bg: #f7f8fa;
+
+    /* TIME WHEEL PICKER: 5 VISIBLE ROWS (center + 2 above + 2 below) - height IS EXACTLY 5 * row-height. BOTH ARE
+       PLAIN PIXEL DESIGN TOKENS (NOT DERIVED FROM ANY OTHER SPACING VAR) SINCE createWheelColumn/
+       attachWheelScrollListeners DO scrollTop MATH DIRECTLY IN PIXELS AGAINST row-height, READ AT RUNTIME VIA
+       getComputedStyle - CHANGING row-height HERE (OR VIA A HOST OVERRIDE) FLOWS THROUGH AUTOMATICALLY. */
+    --calendar-time-wheel-row-height: 36px;
+    --calendar-time-wheel-height: 180px;
 
     display: block;
     position: absolute;
     top: 0;
     left: 0;
-    color: var(--calendar-text-color);
+    font-family: var(--calendar-font-family);
     opacity: 1;
     visibility: visible;
     overflow: visible;
@@ -74,25 +124,20 @@
     user-select: none;
     opacity: 0 !important;
     visibility: hidden !important;
-    /* transform: scale(0);
-    transform-origin: top left; */
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_inner_calendar {
     visibility: visible;
-    background: white;
+    background-color: var(--calendar-background-color);
     opacity: 1;
-    border: 1px solid #ccc;
-    padding: 10px;
+    border: var(--calendar-card-border-width) solid var(--calendar-card-border-color);
+    border-radius: var(--calendar-radius-lg);
+    box-shadow: var(--calendar-shadow-lg);
+    padding: var(--calendar-card-padding);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap {
     position: relative;
-}
-
-.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_wrap {
-    display: flex;
-    flex-direction: column;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_wrap {}
@@ -108,12 +153,24 @@
     cursor: auto !important;
 }
 
+/* HIDE + DISABLE THE NAV ARROWS WHENEVER THE YEAR/MONTH/TIME PICKER IS OPEN - ARROW-DRIVEN MONTH NAVIGATION
+   WHILE ONE OF THOSE PANELS IS OPEN IS CONFUSING/CONFLICTING, AND FOR THE sideArrows LAYOUT THIS CAN'T BE FIXED
+   BY z-INDEX ALONE (SEE calendar_vfz_years_wrap ETC.) SINCE THOSE ARROWS ARE PINNED OUTSIDE THE PANEL'S OWN BOX
+   (NEGATIVE left/right, PAST THE CARD'S EDGES) - THE PANEL NEVER GEOMETRICALLY COVERS THAT SPACE AT ALL, SO THIS
+   HAS TO BE ITS OWN EXPLICIT RULE. pointer-events:none IS NEEDED TOO - THE JS-SIDE calendar_vfz_disable_arrow
+   CHECK (EventHandler.handlerClickArrowsNav) ONLY KNOWS ABOUT YEAR/MONTH LIMITS, NOT POPUP-OPEN STATE. */
+.input_calendar_vfz_outer_wrap:has(.calendar_vfz_years_wrap:not(.calendar_vfz_close_status), .calendar_vfz_months_wrap:not(.calendar_vfz_close_status), .calendar_vfz_time_wrap:not(.calendar_vfz_close_status)) .input_calendar_vfz_nav_arrow {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_header_left_arrow_wrap,
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_header_right_arrow_wrap {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 4px 3px;
+    padding: var(--calendar-space-1) 3px;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_right_arrow .input_calendar_vfz_arrow_image {
@@ -122,23 +179,60 @@
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_left_arrow,
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_right_arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--calendar-arrow-size);
+    height: var(--calendar-arrow-size);
+    border-radius: var(--calendar-radius-pill);
     cursor: pointer;
     user-select: none;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_arrow_image {
-    width: 35px;
-    padding: 3px;
+    width: 16px;
+    padding: 0;
 }
 
 /* SVG */
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_arrow_image .st2 {
-    fill: black;
-    transition: fill 0.3s;
+    fill: var(--calendar-header-month-text-color);
+    transition: fill 0.2s ease;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_arrow_image:hover .st2 {
-    fill: red;
+    fill: var(--calendar-accent);
+}
+
+/* LAYOUT PRESET: sideArrows - PINS THE NAV ARROWS TO THE CARD'S OUTER EDGES INSTEAD OF FLANKING THE TITLE.
+   SAME DOM AS THE 'classic' DEFAULT - ONLY THE POSITIONING CHANGES. .input_calendar_vfz_wrap IS ALREADY
+   position:relative AND SPANS THE WHOLE CARD HEIGHT, SO THE ARROWS CAN BE CENTERED AGAINST THE FULL CARD,
+   NOT JUST THE HEADER ROW. */
+.input_calendar_vfz_outer_wrap.calendar_vfz_layout_sideArrows .input_calendar_vfz_wrap .calendar_vfz_header_left_arrow_wrap,
+.input_calendar_vfz_outer_wrap.calendar_vfz_layout_sideArrows .input_calendar_vfz_wrap .calendar_vfz_header_right_arrow_wrap {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0;
+    z-index: 5;
+}
+
+.input_calendar_vfz_outer_wrap.calendar_vfz_layout_sideArrows .input_calendar_vfz_wrap .calendar_vfz_header_left_arrow_wrap {
+    left: calc(-1 * (var(--calendar-card-padding) + var(--calendar-card-border-width)) - (var(--calendar-arrow-size)/2));
+}
+
+.input_calendar_vfz_outer_wrap.calendar_vfz_layout_sideArrows .input_calendar_vfz_wrap .calendar_vfz_header_right_arrow_wrap {
+    right: calc(-1 * (var(--calendar-card-padding) + var(--calendar-card-border-width)) - (var(--calendar-arrow-size)/2));
+}
+
+.input_calendar_vfz_outer_wrap.calendar_vfz_layout_sideArrows .input_calendar_vfz_wrap .input_calendar_vfz_nav_arrow {
+    background-color: var(--calendar-background-color);
+    border: var(--calendar-card-border-width) solid var(--calendar-card-border-color);
+    box-shadow: var(--calendar-shadow-md);
+}
+
+.input_calendar_vfz_outer_wrap.calendar_vfz_layout_sideArrows .input_calendar_vfz_wrap .calendar_vfz_month_header_title_outer_wrap {
+    padding: 0 var(--calendar-space-1);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_title_wrap {
@@ -147,12 +241,17 @@
     flex-direction: column;
     font-size: var(--calendar-header-font-size);
     text-align: center;
-    margin-bottom: 5px;
+    margin-bottom: var(--calendar-space-1);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_title {
     flex: 1 1;
     color: var(--calendar-header-month-text-color);
+    font-weight: var(--calendar-font-weight-bold);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header_title.calendar_vfz_clickable {
+    cursor: pointer;
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_year_header_title_wrap {
@@ -161,6 +260,7 @@
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_year_header_title {
     flex: 1 1;
+    font-weight: var(--calendar-font-weight-medium);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_year_header_title.calendar_vfz_clickable {
@@ -170,34 +270,77 @@
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_header {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    border-top: 2px solid var(--calendar-header-weekdays-border-color);
-    border-bottom: 2px solid var(--calendar-header-weekdays-border-color);
+    border-top: 1px solid var(--calendar-header-weekdays-border-color);
+    border-bottom: 1px solid var(--calendar-header-weekdays-border-color);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day_header {
     color: var(--calendar-header-weekdays-text-color);
     text-align: center;
-    font-weight: bold;
+    font-weight: var(--calendar-font-weight-semibold);
     font-size: var(--calendar-header-weekDays-font-size);
-    padding: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: var(--calendar-space-2) var(--calendar-space-1);
 }
 
-/* BODY CALENDAR */
+/* BODY CALENDAR - VIEWPORT (overflow:hidden WINDOW) > TRACK (flex ROW, translateX'D BY slideToMonth/DRAG) >
+   ONE (OR MOMENTARILY TWO, DURING A SLIDE) .calendar_vfz_month_body GRIDS */
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_body_viewport {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    touch-action: pan-y;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_body_track {
+    display: flex;
+}
+
+.input_calendar_vfz_outer_wrap.calendar_vfz_dragging .input_calendar_vfz_wrap .calendar_vfz_month_body_track {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_body_track > .calendar_vfz_month_body {
+    flex: 0 0 100%;
+    width: 100%;
+    margin-top: 0;
+}
+
+/* 'fade' TRANSITION MODE - THE PEEK GRID OVERLAYS THE CURRENT ONE INSTEAD OF SITTING BESIDE IT IN THE TRACK
+   (viewport IS ALREADY position:relative, SO THIS POSITIONS CORRECTLY AGAINST IT) */
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_body_viewport > .calendar_vfz_month_body.calendar_vfz_fade_peek {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin-top: 0;
+    opacity: 0;
+    background-color: var(--calendar-background-color);
+    transition: opacity var(--calendar-slide-duration) var(--calendar-fade-easing);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_body_viewport > .calendar_vfz_month_body.calendar_vfz_fade_peek.calendar_vfz_fade_in {
+    opacity: 1;
+}
+
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_month_body {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 2px;
     color: var(--calendar-body-day-text-color);
-    margin-top: 2px;
+    margin-top: var(--calendar-space-1);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day {
     position: relative;
     display: block;
     font-size: var(--calendar-day-font-size);
+    font-weight: var(--calendar-font-weight-regular);
     text-align: center;
-    border-radius: 4px;
-    padding: 4px;
+    border-radius: var(--calendar-radius-sm);
+    padding: var(--calendar-space-2);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_clickable {
@@ -205,16 +348,23 @@
     display: block;
     font-size: var(--calendar-day-font-size);
     text-align: center;
-    border-radius: 4px;
+    border-radius: var(--calendar-radius-sm);
     cursor: pointer;
     user-select: none;
-    padding: 4px;
+    padding: var(--calendar-space-2);
+}
+
+.input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_clickable:not(.calendar_vfz_disabled_day):not(.calendar_vfz_active_day):hover {
+    background-color: var(--calendar-day-hover-bg);
+    color: var(--calendar-day-hover-color);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_current_day,
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_clickable.calendar_vfz_current_day {
-    background-color: var(--calendar-current-day-bg);
+    background-color: transparent;
     color: var(--calendar-current-day-color);
+    font-weight: var(--calendar-font-weight-semibold);
+    box-shadow: inset 0 0 0 1.5px var(--calendar-current-day-ring-color);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_active_day,
@@ -235,22 +385,21 @@
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_start_day {
-    border-top-left-radius: 12px;
-    border-bottom-left-radius: 12px;
+    border-top-left-radius: var(--calendar-radius-md);
+    border-bottom-left-radius: var(--calendar-radius-md);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_end_day {
-    border-top-right-radius: 12px;
-    border-bottom-right-radius: 12px;
+    border-top-right-radius: var(--calendar-radius-md);
+    border-bottom-right-radius: var(--calendar-radius-md);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_range_start_day.calendar_vfz_range_end_day {
-    border-radius: 12px;
+    border-radius: var(--calendar-radius-md);
 }
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_disabled_day {
-    color: grey;
-    text-decoration: line-through;
+    color: var(--calendar-disabled-day-color);
     background-color: transparent;
     cursor: not-allowed;
 }
@@ -261,7 +410,7 @@
 
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_next_month_day,
 .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day.calendar_vfz_prev_month_day {
-    color: rgba(169, 169, 169, 0.5);
+    color: rgba(156, 163, 175, 0.6);
     background-color: transparent;
 }
 
@@ -292,7 +441,15 @@
     bottom: 0;
     left: 50%;
     transform: translate(-50%, 0);
-    transition: transform 0.4s;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_today_button {
+    display: inline-block;
+    font-size: var(--calendar-header-year-font-size);
+    font-weight: var(--calendar-font-weight-medium);
+    color: var(--calendar-accent);
+    border-radius: var(--calendar-radius-pill);
+    padding: var(--calendar-space-1) var(--calendar-space-3);
 }
 
 
@@ -300,7 +457,7 @@
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap {
     position: absolute;
     display: block;
-    background: #EDEDED;
+    background-color: var(--calendar-years-panel-bg);
     top: 0;
     bottom: 0;
     left: 0;
@@ -308,8 +465,11 @@
     overflow-y: auto;
     visibility: visible;
     opacity: 1;
-    z-index: 1;
+    /* ABOVE THE sideArrows LAYOUT PRESET'S PINNED NAV ARROWS (z-index: 5) SO THIS PANEL FULLY COVERS THEM
+       INSTEAD OF THE ARROWS SHOWING THROUGH ON TOP OF IT */
+    z-index: 6;
     transform: scale(1);
+    border-radius: var(--calendar-radius-lg);
 }
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap.calendar_vfz_close_status {
@@ -363,45 +523,346 @@
     border-radius: 4px;
 }
 
+/* SAME SCROLLBAR TREATMENT AS THE YEARS WRAP ABOVE - RARELY ACTUALLY NEEDED (SEE calendar_vfz_months_wrap'S
+   overflow-y COMMENT) BUT KEPT CONSISTENT WITH IT RATHER THAN FALLING BACK TO AN UNSTYLED DEFAULT SCROLLBAR */
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap.firefox-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #aaa transparent;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap::-webkit-scrollbar {
+    width: 5px;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 4px;
+    border: 0px solid transparent;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap::-webkit-scrollbar-thumb:hover {
+    background-color: #585858;
+}
+
+.calendar_vfz_months_wrap:hover::-webkit-scrollbar-thumb {
+    background-color: #aaa;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap::-webkit-scrollbar-track {
+    background-color: transparent;
+    border-radius: 4px;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap::-ms-scrollbar {
+    width: 5px;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap::-ms-scrollbar-thumb {
+    background-color: #aaa;
+    border-radius: 4px;
+}
+
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_years_container {
     position: relative;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-auto-rows: min-content;
-    gap: 2px;
+    gap: var(--calendar-space-2);
     min-height: 100%;
     overflow: hidden;
-    padding: 10px 5px 10px 10px;
+    padding: var(--calendar-space-3) var(--calendar-space-2) var(--calendar-space-3) var(--calendar-space-3);
     box-sizing: border-box;
 }
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_year {
     display: block;
+    background-color: var(--calendar-background-color);
     color: var(--calendar-body-year-text-color);
     text-align: center;
     cursor: pointer;
     font-size: var(--calendar-year-font-size);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    padding: 10px;
+    font-weight: var(--calendar-font-weight-medium);
+    border: 1px solid var(--calendar-card-border-color);
+    border-radius: var(--calendar-radius-md);
+    box-shadow: var(--calendar-shadow-sm);
+    padding: var(--calendar-space-2);
     transform: scale(1);
-    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_year:hover {
-    background-color: #f0f0f096;
-    border-color: #aaa;
+    background-color: var(--calendar-day-hover-bg);
+    border-color: var(--calendar-accent);
     z-index: 1;
-    transform: scale(1.1);
 }
 
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_year.calendar_vfz_active_year {
     background-color: var(--calendar-active-year-bg);
+    border-color: var(--calendar-active-year-bg);
     color: var(--calendar-active-year-color);
+    box-shadow: var(--calendar-shadow-md);
+}
+
+/* MONTHS WRAP - SAME OVERLAY PATTERN AS THE YEARS WRAP ABOVE, BUT ALWAYS EXACTLY 12 CHIPS, SO NO SCROLL/SCROLLBAR
+   MACHINERY IS NEEDED */
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap {
+    position: absolute;
+    display: block;
+    background-color: var(--calendar-years-panel-bg);
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    /* overflow-y (NOT visible) SO CONTENT NEVER SPILLS PAST THE ROUNDED CORNERS BELOW - A 4-COLUMN GRID SHOULD
+       FIT ALL 12 MONTHS WITHOUT NEEDING TO ACTUALLY SCROLL IN PRACTICE, BUT THIS IS THE SAFETY NET IF IT EVER
+       DOESN'T (E.G. AN UNUSUALLY SHORT CARD/LARGE FONT-SIZE OVERRIDE) */
+    overflow-y: auto;
+    visibility: visible;
+    opacity: 1;
+    /* SAME REASONING AS calendar_vfz_years_wrap ABOVE - ABOVE sideArrows' PINNED ARROWS (z-index: 5) */
+    z-index: 6;
+    transform: scale(1);
+    border-radius: var(--calendar-radius-lg);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap.calendar_vfz_close_status {
+    transform: scale(0);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap .calendar_vfz_months_container {
+    position: relative;
+    display: grid;
+    /* SINGLE COLUMN, VERTICAL LIST - UNLIKE THE YEARS GRID, WHICH NEEDS MULTIPLE COLUMNS TO KEEP A POTENTIALLY
+       LARGE YEAR RANGE SCANNABLE. WITH ONLY 12 FIXED ENTRIES A STACKED LIST READS MORE LIKE A NATURAL MONTH
+       MENU. THIS MAKES THE overflow-y: auto FALLBACK ABOVE ACTUALLY GET EXERCISED IN PRACTICE (12 ROWS IS
+       TALLER THAN THE CARD), NOT JUST A RARE EDGE CASE. */
+    grid-template-columns: 1fr;
+    grid-auto-rows: min-content;
+    gap: var(--calendar-space-2);
+    min-height: 100%;
+    overflow: hidden;
+    padding: var(--calendar-space-3) var(--calendar-space-2) var(--calendar-space-3) var(--calendar-space-3);
+    box-sizing: border-box;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap .calendar_vfz_month_choice {
+    display: block;
+    background-color: var(--calendar-background-color);
+    color: var(--calendar-body-year-text-color);
+    text-align: center;
+    cursor: pointer;
+    font-size: var(--calendar-year-font-size);
+    font-weight: var(--calendar-font-weight-medium);
+    border: 1px solid var(--calendar-card-border-color);
+    border-radius: var(--calendar-radius-md);
+    box-shadow: var(--calendar-shadow-sm);
+    padding: var(--calendar-space-2);
+    transform: scale(1);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap .calendar_vfz_month_choice:not(.calendar_vfz_disabled_month):hover {
+    background-color: var(--calendar-day-hover-bg);
+    border-color: var(--calendar-accent);
+    z-index: 1;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap .calendar_vfz_month_choice.calendar_vfz_active_month {
+    background-color: var(--calendar-active-year-bg);
+    border-color: var(--calendar-active-year-bg);
+    color: var(--calendar-active-year-color);
+    box-shadow: var(--calendar-shadow-md);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap .calendar_vfz_month_choice.calendar_vfz_disabled_month {
+    color: var(--calendar-disabled-day-color);
+    background-color: transparent;
+    cursor: not-allowed;
+}
+
+/* TIME WRAP - SAME OVERLAY POSITIONING AS THE MONTHS/YEARS WRAPS. THE WRAP ITSELF NEVER SCROLLS (overflow: hidden)
+   - THE HOUR/MINUTE "WHEEL" COLUMNS INSIDE calendar_vfz_wheels_row EACH SCROLL INDEPENDENTLY, INFINITE-WRAP STYLE
+   (SEE DOMManager.createWheelColumn / EventHandler.attachWheelScrollListeners) */
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap {
+    position: absolute;
+    display: block;
+    background-color: var(--calendar-years-panel-bg);
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    overflow: hidden;
+    visibility: visible;
+    opacity: 1;
+    /* SAME REASONING AS calendar_vfz_years_wrap - ABOVE sideArrows' PINNED ARROWS (z-index: 5), BUT BELOW
+       calendar_vfz_time_trigger_wrap (SEE ITS OWN COMMENT) SO THE TRIGGER STAYS CLICKABLE WHILE THIS IS OPEN */
+    z-index: 6;
+    transform: scale(1);
+    border-radius: var(--calendar-radius-lg);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap.calendar_vfz_close_status {
+    transform: scale(0);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_time_container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: var(--calendar-space-2);
+    padding: var(--calendar-space-3) var(--calendar-space-2) var(--calendar-space-3) var(--calendar-space-3);
+    box-sizing: border-box;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_wheels_row {
+    position: relative;
+    /* flex: 0 0 auto (NOT 1 1 0) - time_wrap COVERS THE WHOLE CARD (MUCH TALLER THAN THE 180px WHEELS), SO
+       flex:1 STRETCHED THIS ROW TO FILL ALL THAT LEFTOVER HEIGHT. THE FIXED-HEIGHT WHEEL COLUMNS DON'T THEMSELVES
+       GROW, SO THEY SAT AT THE TOP OF THE STRETCHED ROW - MISALIGNING calendar_vfz_wheel_center_band'S
+       top:50% (WHICH CENTERED ON THE STRETCHED ROW, NOT THE ACTUAL WHEEL CONTENT) AND PUSHING
+       calendar_vfz_period_container DOWN TOWARD THE BOTTOM OF THE PANEL, WHERE IT COLLIDED WITH THE TIME
+       TRIGGER ROW SITTING JUST BELOW THE DAY-GRID. WITH auto SIZING, THIS ROW IS EXACTLY AS TALL AS ITS CHILDREN
+       (180px), SO BOTH PROBLEMS GO AWAY TOGETHER. */
+    flex: 0 0 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    gap: var(--calendar-space-2);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_hours_container,
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_minutes_container {
+    flex: 1 1 0;
+    height: var(--calendar-time-wheel-height);
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    /* CENTERS THE FIRST/LAST REAL VALUE - SEE createWheelColumn'S COMMENT FOR THE scrollTop = index * rowHeight
+       MATH THIS PADDING MAKES POSSIBLE */
+    padding-top: calc((var(--calendar-time-wheel-height) - var(--calendar-time-wheel-row-height)) / 2);
+    padding-bottom: calc((var(--calendar-time-wheel-height) - var(--calendar-time-wheel-row-height)) / 2);
+    box-sizing: border-box;
+    /* NO SCROLLBAR AT ALL - THIS IS A WHEEL PICKER, NOT A SCROLLABLE LIST */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_hours_container::-webkit-scrollbar,
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_minutes_container::-webkit-scrollbar {
+    display: none;
+}
+
+/* CENTER-SELECTION BAND - A STATIC VISUAL ANCHOR SPANNING BOTH WHEELS, INDEPENDENT OF THE SCROLL-DRIVEN SCALE
+   EFFECT ON THE CHIPS THEMSELVES. position:absolute SO IT NEVER CONSUMES FLEX LAYOUT SPACE IN calendar_vfz_wheels_row. */
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_wheel_center_band {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: var(--calendar-time-wheel-row-height);
+    transform: translateY(-50%);
+    pointer-events: none;
+    background-color: var(--calendar-day-hover-bg);
+    border-top: 1px solid var(--calendar-card-border-color);
+    border-bottom: 1px solid var(--calendar-card-border-color);
+    z-index: 0;
+}
+
+/* ONLY 2 ITEMS (AM/PM) - A PLAIN ROW BELOW THE WHEELS NOW THAT THERE'S NO SCROLLBAR TO MAKE ROOM FOR BESIDE THEM */
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_period_container {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: var(--calendar-space-2);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_hour_choice,
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_minute_choice {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--calendar-time-wheel-row-height);
+    box-sizing: border-box;
+    scroll-snap-align: center;
+    cursor: pointer;
+    user-select: none;
+    font-size: var(--calendar-year-font-size);
+    font-weight: var(--calendar-font-weight-medium);
+    color: var(--calendar-body-year-text-color);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_hour_choice.calendar_vfz_active_hour,
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_minute_choice.calendar_vfz_active_minute {
+    color: var(--calendar-accent);
+    font-weight: var(--calendar-font-weight-bold);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_hour_choice.calendar_vfz_disabled_hour,
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_minute_choice.calendar_vfz_disabled_minute {
+    color: var(--calendar-disabled-day-color);
+    cursor: not-allowed;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_period_choice {
+    display: block;
+    background-color: var(--calendar-background-color);
+    color: var(--calendar-body-year-text-color);
+    text-align: center;
+    cursor: pointer;
+    font-size: var(--calendar-year-font-size);
+    font-weight: var(--calendar-font-weight-medium);
+    border: 1px solid var(--calendar-card-border-color);
+    border-radius: var(--calendar-radius-md);
+    box-shadow: var(--calendar-shadow-sm);
+    padding: var(--calendar-space-2) var(--calendar-space-3);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_period_choice:hover {
+    background-color: var(--calendar-day-hover-bg);
+    border-color: var(--calendar-accent);
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_period_choice.calendar_vfz_active_period {
+    background-color: var(--calendar-active-year-bg);
+    border-color: var(--calendar-active-year-bg);
+    color: var(--calendar-active-year-color);
+    box-shadow: var(--calendar-shadow-md);
+}
+
+/* TIME TRIGGER ROW - APPENDED BELOW THE DAY GRID (SEE DOMManager.createTimeTriggerRow). position:relative WITH A
+   z-index ABOVE calendar_vfz_time_wrap's (6) IS REQUIRED, NOT JUST STYLING - THE TIME PANEL COVERS THE WHOLE
+   CARD (INCLUDING WHERE THIS ROW SITS) WHEN OPEN, SO WITHOUT THIS THE TRIGGER WOULD BE VISUALLY/INTERACTIVELY
+   BURIED UNDER ITS OWN PANEL ONCE OPENED, MAKING IT IMPOSSIBLE TO CLICK AGAIN TO CLOSE (handlerClickTimeToNav
+   WOULD NEVER SEE THE CLICK, SINCE event.target WOULD RESOLVE TO THE PANEL INSTEAD OF THE TRIGGER UNDERNEATH IT) */
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_trigger_wrap {
+    position: relative;
+    z-index: 7;
+    display: flex;
+    justify-content: center;
+    margin-top: var(--calendar-space-2);
+}
+
+/* THE TRIGGER SHOULD ONLY EVER SHOW IN THE ORDINARY DAY-GRID VIEW OR WHILE ITS OWN (time) POPUP IS OPEN - NOT
+   WHILE THE YEAR OR MONTH POPUP IS OPEN, SINCE ITS z-index:7 ABOVE (NEEDED SO IT STAYS CLICKABLE OVER ITS OWN
+   PANEL) WOULD OTHERWISE ALSO KEEP IT FLOATING VISIBLY ON TOP OF THOSE OTHER PANELS TOO */
+.input_calendar_vfz_outer_wrap:has(.calendar_vfz_years_wrap:not(.calendar_vfz_close_status), .calendar_vfz_months_wrap:not(.calendar_vfz_close_status)) .calendar_vfz_time_trigger_wrap {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_trigger {
+    display: inline-block;
+    cursor: pointer;
+    font-size: var(--calendar-header-year-font-size);
+    font-weight: var(--calendar-font-weight-medium);
+    color: var(--calendar-accent);
+    background-color: var(--calendar-day-hover-bg);
+    border-radius: var(--calendar-radius-pill);
+    padding: var(--calendar-space-1) var(--calendar-space-3);
 }
 
 .input_calendar_vfz_outer_wrap .calendar_vfz_loader_overlay {
@@ -411,8 +872,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--calendar-space-3);
     background-color: var(--calendar-loader-overlay-bg);
+    border-radius: var(--calendar-radius-lg);
     z-index: 10000;
 }
 
@@ -433,7 +895,7 @@
     font-size: 14px;
     color: var(--calendar-body-day-text-color);
     text-align: center;
-    padding: 0 10px;
+    padding: 0 var(--calendar-space-3);
 }
 
 @keyframes calendar_vfz_spin {
@@ -442,9 +904,40 @@
     }
 }
 
+/* MOTION - DECORATIVE TRANSITIONS ONLY PLAY WHEN THE USER HASN'T ASKED FOR REDUCED MOTION.
+   NOTE: calendarWrap/calendarInnerWrap/yearsWrap open-close fade timing is set inline via JS from
+   config.style.transitions (DOMManager.prepareCssForThisCalendarFromConfig) and always overrides
+   anything declared here for those elements, so it's deliberately not duplicated in this file. */
+@media (prefers-reduced-motion: no-preference) {
 
+    .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .calendar_vfz_day,
+    .input_calendar_vfz_outer_wrap .input_calendar_vfz_wrap .input_calendar_vfz_nav_arrow,
+    .input_calendar_vfz_outer_wrap .calendar_vfz_years_wrap .calendar_vfz_year,
+    .input_calendar_vfz_outer_wrap .calendar_vfz_months_wrap .calendar_vfz_month_choice,
+    .input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_hour_choice,
+    .input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_minute_choice,
+    .input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_period_choice {
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
 
+    .input_calendar_vfz_outer_wrap .calendar_vfz_today_button_wrap {
+        transition: transform 0.4s;
+    }
+}
 
+/* THE SLIDE TRANSITION IS LOAD-BEARING (STATE MUST CONVERGE EITHER WAY), NOT DECORATIVE, SO IT'S COLLAPSED TO
+   NEAR-INSTANT RATHER THAN REMOVED. slideToMonth/DRAG SET `transition: transform var(--calendar-slide-duration)...`
+   INLINE VIA JS, BUT CUSTOM PROPERTY VALUES STILL RESOLVE LIVE FROM THE CASCADE, SO OVERRIDING THE VARIABLE HERE
+   IS ENOUGH - NO JS-SIDE prefers-reduced-motion CHECK NEEDED, AND transitionend STILL FIRES SO THE FINALIZE LOGIC
+   NEEDS NO SPECIAL-CASING. */
+@media (prefers-reduced-motion: reduce) {
+    .input_calendar_vfz_outer_wrap {
+        /* !important SINCE style.transitions.monthNavigation NOW SETS THIS SAME VARIABLE VIA AN INLINE STYLE
+           (DOMManager.createOuterWrap) - AN INLINE DECLARATION WOULD OTHERWISE ALWAYS BEAT THIS RULE REGARDLESS
+           OF SPECIFICITY, SILENTLY BREAKING REDUCED-MOTION FOR ANY CALENDAR USING A CUSTOM DURATION */
+        --calendar-slide-duration: 1ms !important;
+    }
+}
 
 /* MOBILE */
 .calendar_vfz_overlay_for_mobile {

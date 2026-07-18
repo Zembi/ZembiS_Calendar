@@ -9,6 +9,11 @@ class EventHandler {
     constructor(controller) {
         this.controller = controller;
 
+        // DRAG-TO-NAVIGATE STATE - LIVES HERE (NOT PER-CONFIG) SINCE ONLY ONE POINTER GESTURE CAN BE
+        // PHYSICALLY ACTIVE AT A TIME REGARDLESS OF HOW MANY CALENDARS EXIST ON THE PAGE
+        this._activeDrag = null;
+        this._suppressNextClick = false;
+
         this.createClickAndHoldEvent();
     }
 
@@ -77,6 +82,11 @@ class EventHandler {
         }
 
         config.functionsHandler._calendarClickHandler = (event) => {
+            // SUPPRESSES THE SYNTHESIZED click THAT FOLLOWS A REAL/ATTEMPTED DRAG (SET IN handlePointerUp) -
+            // WITHOUT THIS, A DRAG WHOSE RELEASE POINT ENDS UP OUTSIDE calendarWrap WOULD LOOK LIKE A GENUINE
+            // "CLICK OUTSIDE" AND CLOSE THE CALENDAR, REGARDLESS OF closeOnClickDay
+            if (this._suppressNextClick) return;
+
             const isTargetInput = event.target === targetInput;
             const isInsideCalendar = config.coreElements.calendarWrap.contains(event.target);
 
@@ -148,6 +158,21 @@ class EventHandler {
                 // console.log(config.functionsHandler);
                 config.functionsHandler._calendarResizeHandler = null;
             }
+
+            // scroll DOESN'T BUBBLE, SO THESE WERE ATTACHED DIRECTLY TO THE WHEEL COLUMNS THEMSELVES (SEE
+            // attachWheelScrollListeners) RATHER THAN THE DOCUMENT-LEVEL DELEGATED PATTERN EVERYTHING ELSE USES
+            const ccn = this.controller.ccn;
+            const timeWrap = config.coreElements?.timeWrap;
+            if (config.functionsHandler._hoursWheelScroll && timeWrap) {
+                const hoursContainer = timeWrap.querySelector(`.${ccn}_hours_container`);
+                if (hoursContainer) hoursContainer.removeEventListener('scroll', config.functionsHandler._hoursWheelScroll);
+                config.functionsHandler._hoursWheelScroll = null;
+            }
+            if (config.functionsHandler._minutesWheelScroll && timeWrap) {
+                const minutesContainer = timeWrap.querySelector(`.${ccn}_minutes_container`);
+                if (minutesContainer) minutesContainer.removeEventListener('scroll', config.functionsHandler._minutesWheelScroll);
+                config.functionsHandler._minutesWheelScroll = null;
+            }
         }
     }
 
@@ -175,29 +200,26 @@ class EventHandler {
             });
         });
 
-        Calendar_Controller.domReadyPromise.then(() => {
-            const ccn = this.controller.ccn;
-            const observer = new MutationObserver(() => {
-                const cursorEl = document.querySelector(`.input_${ccn}_outer_wrap .${ccn}_cursor_to_follow`);
-                // console.log(cursorEl);
-                if (cursorEl) {
-                    if (!this.controller.mousemoveListenerAdded) {
-                        this.controller.mouseMoveEventsDelegation = (event) => {
-                            this.handleMouseMove(event);
-                        };
-                        document.addEventListener('pointermove', this.controller.mouseMoveEventsDelegation, { once: true });
-                        this.controller.mousemoveListenerAdded = true;
-                    }
-                    observer.disconnect();
-                }
-            });
-
-            const calendar_root = document.querySelector(`.input_${ccn}_outer_wrap`);
-            observer.observe(calendar_root, { childList: true, subtree: true });
+        // DRAG-TO-NAVIGATE MONTHS - POINTER EVENTS UNIFY MOUSE+TOUCH IN ONE CODE PATH
+        document.addEventListener('pointerdown', (event) => this.handlePointerDown(event));
+        document.addEventListener('pointermove', (event) => this.handlePointerMove(event), { passive: false });
+        ['pointerup', 'pointercancel'].forEach(type => {
+            document.addEventListener(type, (event) => this.handlePointerUp(event));
         });
+
+        // YEAR-PICKER CURSOR-FOLLOW EFFECT - A NORMAL ALWAYS-ON DELEGATED LISTENER LIKE THE OTHERS ABOVE.
+        // handlerMousemoveYear ALREADY SCOPES TO WHICHEVER CALENDAR IS CURRENTLY HOVERED AND NO-OPS CORRECTLY
+        // IF THAT CALENDAR HAS NO cursor_to_follow ELEMENT, SO NO SPECIAL SETUP/TEARDOWN IS NEEDED HERE
+        document.addEventListener('pointermove', (event) => this.handleMouseMove(event));
     }
 
     clickEventsDelegation(event) {
+        // SUPPRESSES THE SYNTHESIZED click THAT FOLLOWS A REAL DRAG (SET IN handlePointerUp) - A FLAG CHECK,
+        // NOT A DOM CHANGE, SO IT CAN NEVER DETACH event.target BEFORE OTHER LISTENERS FOR THIS SAME CLICK RUN.
+        // DELIBERATELY DOESN'T RESET THE FLAG HERE - _calendarClickHandler (A SEPARATE, PER-CALENDAR click
+        // LISTENER) ALSO NEEDS TO SEE IT FOR THIS SAME EVENT; handlePointerUp CLEARS IT ON THE NEXT TICK INSTEAD
+        if (this._suppressNextClick) return;
+
         const clickedEl = event.target.closest(`.input_${this.controller.ccn}_outer_wrap`);
         if (!clickedEl) return;
 
@@ -211,6 +233,15 @@ class EventHandler {
         this.handlerClickYearToNav(clickedEl, event);
         // EVENT LISTENERS FOR SELECTING YEARS
         this.handlerClickYear(clickedEl, event);
+        // EVENT LISTENERS FOR NAVIGATING TO MONTHS
+        this.handlerClickMonthToNav(clickedEl, event);
+        // EVENT LISTENERS FOR SELECTING MONTHS
+        this.handlerClickMonth(clickedEl, event);
+        // EVENT LISTENERS FOR NAVIGATING TO / SELECTING TIME
+        this.handlerClickTimeToNav(clickedEl, event);
+        this.handlerClickHour(clickedEl, event);
+        this.handlerClickMinute(clickedEl, event);
+        this.handlerClickPeriod(clickedEl, event);
         // EVENT LISTENERS FOR SELECTING DAYS
         this.handlerClickDay(event);
     }
@@ -225,7 +256,7 @@ class EventHandler {
     handlerHoverDay(clickedEl, event) {
         const ccn = this.controller.ccn;
         const config = this.controller.configManager.getConfigById(clickedEl.id);
-        if (!config || config.disabled || !config.day.rangeSelect || config.day.handler.rangeState !== 'selecting') return;
+        if (!config || config.disabled || config.slide?.active || !config.day.rangeSelect || config.day.handler.rangeState !== 'selecting') return;
 
         if (event.type === 'mouseout') {
             const stillInsideCalendar = event.relatedTarget && clickedEl.contains(event.relatedTarget);
@@ -278,6 +309,179 @@ class EventHandler {
         });
     }
 
+    // DRAG-TO-NAVIGATE: POINTERDOWN JUST RECORDS THE START POSITION - NOTHING MOVES YET, SO A PLAIN TAP STILL
+    // FALLS THROUGH TO THE ORDINARY click-TO-SELECT PATH UNTOUCHED
+    handlePointerDown(event) {
+        const viewportEl = event.target.closest(`.${this.controller.ccn}_month_body_viewport`);
+        if (!viewportEl) return;
+
+        const outerWrapEl = event.target.closest(`.input_${this.controller.ccn}_outer_wrap`);
+        const config = outerWrapEl ? this.controller.configManager.getConfigById(outerWrapEl.id) : null;
+        if (!config || config.disabled || !config.clickable || !config.navigation.dragToNavigate) return;
+        if (config.slide.active) return; // DON'T START A NEW GESTURE WHILE ONE IS ALREADY ANIMATING
+        if (this._activeDrag) return; // DON'T LET A STRAY SECOND POINTERDOWN (E.G. A SECOND TOUCH) STOMP ONE IN PROGRESS
+
+        this._activeDrag = {
+            config,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            viewportEl,
+            resolvedAxis: false,
+            dragging: false,
+            // TRUE THE MOMENT THE POINTER MOVES PAST THE TAP SLOP, REGARDLESS OF WHETHER THE GESTURE GOES ON TO
+            // BE ACCEPTED AS A SLIDE OR REJECTED (VERTICAL / DISABLED DIRECTION) - SEE handlePointerUp
+            movedPastSlop: false,
+        };
+    }
+
+    handlePointerMove(event) {
+        const drag = this._activeDrag;
+        if (!drag || event.pointerId !== drag.pointerId) return;
+
+        const dx = event.clientX - drag.startX;
+        const dy = event.clientY - drag.startY;
+
+        if (!drag.resolvedAxis) {
+            if (Math.hypot(dx, dy) < 10) return; // TAP-VS-DRAG SLOP
+
+            drag.resolvedAxis = true;
+            drag.movedPastSlop = true;
+
+            if (Math.abs(dy) >= Math.abs(dx)) {
+                // VERTICAL WINS - LET THE PAGE SCROLL NATIVELY, THIS GESTURE ISN'T A SLIDE. DELIBERATELY DON'T
+                // NULL this._activeDrag HERE - IT NEEDS TO STAY ALIVE (JUST INERT) SO handlePointerUp STILL SEES
+                // movedPastSlop=true AND SUPPRESSES THE TRAILING click INSTEAD OF LETTING IT SELECT/CLOSE
+                // WHATEVER HAPPENS TO BE UNDER THE RELEASE POINT
+                return;
+            }
+
+            const direction = dx < 0 ? 1 : -1; // DRAG LEFT = GO TO NEXT MONTH
+            const { prevAvailable, nextAvailable } = this.controller.configManager.computeNavAvailability(drag.config);
+            if (direction === 1 ? !nextAvailable : !prevAvailable) {
+                // CAN'T DRAG TOWARD A DISABLED DIRECTION - NO VISUAL MOVEMENT FOR THIS GESTURE, BUT (LIKE THE
+                // VERTICAL-REJECTION CASE ABOVE) DELIBERATELY DON'T NULL this._activeDrag - IT MUST STAY ALIVE
+                // SO handlePointerUp STILL SEES movedPastSlop=true AND SUPPRESSES THE TRAILING click
+                return;
+            }
+
+            drag.dragging = true;
+            drag.direction = direction;
+            this.controller.domManager.pinMonthBodyViewportWidth(drag.config);
+            drag.widthPx = drag.viewportEl.getBoundingClientRect().width;
+
+            const [targetMonth, targetYear] = this.controller.dateManager.findTargetMonth(drag.config.openCalendar, direction);
+            drag.targetMonth = targetMonth;
+            drag.targetYear = targetYear;
+
+            // OPTIMISTICALLY SHOW THE TARGET MONTH/YEAR IN THE HEADER, IN SYNC WITH THE PEEK GRID - REVERTED IN
+            // handlePointerUp IF THE DRAG ENDS UP CANCELLED (RELEASED SHORT OF THE COMMIT THRESHOLD)
+            const headerEl = drag.config.coreElements.calendarWrap.querySelector(`.${this.controller.ccn}_month_header_title_wrap`);
+            if (headerEl) {
+                headerEl.innerHTML = this.controller.domManager.buildMonthYearHtml(drag.config, targetMonth, targetYear);
+            }
+
+            const track = drag.config.coreElements.monthBodyTrack;
+            drag.track = track;
+
+            const peek = document.createElement('div');
+            peek.className = `${this.controller.ccn}_month_body`;
+            peek.innerHTML = this.controller.domManager.buildMonthBodyHtml(drag.config, targetMonth, targetYear, false);
+            if (direction === 1) {
+                track.appendChild(peek);
+            } else {
+                track.insertBefore(peek, track.firstChild);
+            }
+            drag.peekEl = peek;
+
+            drag.basePx = direction === 1 ? 0 : -drag.widthPx;
+            track.style.transition = 'none';
+            track.style.transform = `translateX(${drag.basePx}px)`;
+
+            drag.config.slide.active = true;
+            drag.config.slide.dragging = true;
+            drag.config.coreElements.calendarWrap.classList.add(`${this.controller.ccn}_dragging`);
+        }
+
+        if (drag.dragging) {
+            event.preventDefault(); // SAFE NOW - ONLY AFTER HORIZONTAL-DOMINANCE IS CONFIRMED, NEVER PRE-EMPTIVELY
+            drag.pendingClientX = event.clientX;
+            if (!drag.rafScheduled) {
+                drag.rafScheduled = true;
+                requestAnimationFrame(() => this._applyDragFrame(drag));
+            }
+        }
+    }
+
+    _applyDragFrame(drag) {
+        drag.rafScheduled = false;
+        if (this._activeDrag !== drag) return; // GESTURE ENDED BEFORE THIS FRAME RAN
+
+        const rawDx = drag.pendingClientX - drag.startX;
+        const clamped = Math.max(-drag.widthPx, Math.min(drag.widthPx, rawDx));
+        const px = Math.max(-drag.widthPx, Math.min(0, drag.basePx + clamped));
+        drag.track.style.transform = `translateX(${px}px)`;
+        drag.lastPx = px;
+    }
+
+    handlePointerUp(event) {
+        const drag = this._activeDrag;
+        if (!drag || event.pointerId !== drag.pointerId) return;
+        this._activeDrag = null;
+
+        if (drag.movedPastSlop) {
+            // THE POINTER MOVED MEANINGFULLY AWAY FROM THE PRESS POINT - EVEN IF THE GESTURE NEVER BECAME (OR
+            // WAS REJECTED AS) A MONTH-SLIDE, SUPPRESS THE click THE BROWSER SYNTHESIZES RIGHT AFTER THIS
+            // pointerup, SO A FAILED/REJECTED DRAG ATTEMPT CAN'T ACCIDENTALLY SELECT (OR, VIA THE SEPARATE
+            // "CLICK OUTSIDE CLOSES" LISTENER, CLOSE) WHATEVER HAPPENS TO BE UNDER THE RELEASE POINT.
+            // SET (NOT RESET) HERE - BOTH clickEventsDelegation AND THE PER-CALENDAR _calendarClickHandler NEED
+            // TO SEE IT TRUE FOR THIS SAME CLICK EVENT, REGARDLESS OF WHICH ONE RUNS FIRST, SO IT'S CLEARED ON
+            // THE NEXT TICK INSTEAD OF BEING CONSUMED BY WHICHEVER LISTENER CHECKS IT FIRST
+            this._suppressNextClick = true;
+            setTimeout(() => { this._suppressNextClick = false; }, 0);
+        }
+
+        if (!drag.dragging) return; // PLAIN TAP OR A REJECTED GESTURE - NOTHING ELSE TO CLEAN UP
+
+        const traveled = Math.abs((drag.lastPx ?? drag.basePx) - drag.basePx);
+        const commit = drag.widthPx > 0 && (traveled / drag.widthPx) >= 0.30;
+        const targetPx = commit
+            ? (drag.direction === 1 ? -drag.widthPx : 0)
+            : (drag.direction === 1 ? 0 : -drag.widthPx);
+
+        drag.track.style.transition = `transform var(--calendar-slide-duration) var(--calendar-slide-easing)`;
+        drag.track.style.transform = `translateX(${targetPx}px)`;
+
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+
+            drag.config.coreElements.calendarWrap.classList.remove(`${this.controller.ccn}_dragging`);
+
+            if (commit) {
+                this.controller.domManager._finalizeSlide(drag.config, drag.targetMonth, drag.targetYear, drag.track);
+            } else {
+                drag.track.style.transition = 'none';
+                drag.peekEl.remove();
+                drag.track.style.transform = 'translateX(0px)';
+                this.controller.domManager.unpinMonthBodyViewportWidth(drag.config);
+
+                // REVERT THE OPTIMISTIC HEADER PREVIEW - config.openCalendar IS STILL THE ORIGINAL MONTH/YEAR HERE
+                // SINCE A CANCELLED DRAG NEVER COMMITS, SO returnMonthYear CORRECTLY RENDERS THE ORIGINAL AGAIN
+                const headerEl = drag.config.coreElements.calendarWrap.querySelector(`.${this.controller.ccn}_month_header_title_wrap`);
+                if (headerEl) {
+                    headerEl.innerHTML = this.controller.domManager.returnMonthYear(drag.config);
+                }
+
+                drag.config.slide.active = false;
+                drag.config.slide.dragging = false;
+            }
+        };
+        drag.track.addEventListener('transitionend', finish, { once: true });
+        setTimeout(finish, 600); // SAFETY NET IN CASE transitionend NEVER FIRES
+    }
+
     // CORE EVENT LISTENER FOR NAVIGATING MONTHS
     handlerClickArrowsNav(clickedEl, event) {
         const ccn = this.controller.ccn;
@@ -295,29 +499,30 @@ class EventHandler {
         this.navigateMonth(config, navDirection);
     }
 
-    // TRIGGERS WHEN USER CLICKS ARROWS TO GO TO THE NEXT OR THE PREVIOUS MONTH
+    // TRIGGERS WHEN USER CLICKS ARROWS TO GO TO THE NEXT OR THE PREVIOUS MONTH. RETURNS WHETHER IT ACTUALLY
+    // NAVIGATED (false ON A LIMITS REJECTION OR A slideToMonth RE-ENTRANCY BAIL) - CALLERS THAT DO SOMETHING
+    // CONDITIONAL ON SUCCESS (E.G. handlerClickYear) MUST CHECK THIS RATHER THAN ASSUMING IT ALWAYS SUCCEEDED
     navigateMonth(config, direction) {
         const [newMonth, newYear] = this.controller.dateManager.findTargetMonth(config.openCalendar, direction);
         const limits = config.processedLimits;
 
         // ENSURE THE YEAR STAYS WITHIN THE PROCESSED LIMITS
-        if (newYear < limits.minYear || newYear > limits.maxYear) return;
+        if (newYear < limits.minYear || newYear > limits.maxYear) return false;
 
         // OPTIONALLY ENSURE THE MONTH STAYS WITHIN THAT YEAR'S PROCESSED LIMITS
         if (config.navigation.respectMonthLimits) {
             const yearLimits = limits.years[newYear];
-            if (!yearLimits || newMonth < yearLimits.months.minMonth || newMonth > yearLimits.months.maxMonth) return;
+            if (!yearLimits || newMonth < yearLimits.months.minMonth || newMonth > yearLimits.months.maxMonth) return false;
         }
 
-        // PROCEED TO UPDATE THE CALENDAR WITH THE NEW MONTH
-        const newDate = new Date(newYear, newMonth);
-        config.openCalendar = newDate;  // UPDATE THE CALENDAR WITH THE NEW DATE
-
-        this.rerenderMonthAndHeader(config);
+        // PROCEED TO SLIDE TO THE NEW MONTH - slideToMonth OWNS THE config.openCalendar ASSIGNMENT AT FINALIZE TIME
+        return this.controller.domManager.slideToMonth(config, direction);
     }
 
-    // TARGETED RE-RENDER OF THE HEADER + DAY-GRID FOR WHATEVER config.openCalendar CURRENTLY IS -
-    // REUSED BY navigateMonth AND BY THE PROGRAMMATIC NAVIGATION/LIMITS-UPDATE PUBLIC FUNCTIONS
+    // INSTANT (NON-ANIMATED) TARGETED RE-RENDER OF THE HEADER + DAY-GRID FOR WHATEVER config.openCalendar
+    // CURRENTLY IS - USED BY THE PROGRAMMATIC setOpenCalendar/updateYearLimits PUBLIC FUNCTIONS, WHICH
+    // DELIBERATELY DON'T ANIMATE (ARBITRARY JUMPS, NOT A DIRECTIONAL "NEXT/PREV" NAVIGATION). ARROW-CLICK/
+    // YEAR-SELECT NAVIGATION GOES THROUGH DOMManager.slideToMonth INSTEAD (SEE navigateMonth).
     rerenderMonthAndHeader(config) {
         this.removeDayEventListener(config);
 
@@ -336,6 +541,8 @@ class EventHandler {
             // UPDATE THE ARROWS' VISIBILITY BASED ON NEXT/PREVIOUS MONTH VALIDITY
             this.controller.configManager.arrowsCheckIfNeeded(config);
         }
+        this.controller.domManager.syncActiveYearChip(config);
+        this.controller.domManager.rebuildMonthsPicker(config);
     }
 
     // CORE EVENT LISTENER FOR NAVIGATING TO YEARS
@@ -386,20 +593,386 @@ class EventHandler {
 
         const config = this.controller.configManager.getConfigById(clickedEl.id);
 
+        const currentMonth = config.openCalendar.getMonth();
         const currentYear = config.openCalendar.getFullYear();
-        const targetYear = clickedYear.getAttribute('data-year');
-        const navDirection = (targetYear - currentYear) * 12;
+        const targetYear = parseInt(clickedYear.getAttribute('data-year'), 10);
 
-        if (navDirection) {
-            this.navigateMonth(config, navDirection);
+        // IF THE CURRENTLY-VIEWED MONTH ISN'T ALLOWED IN THE TARGET YEAR, SNAP TO THE NEAREST MONTH THAT IS,
+        // RATHER THAN LETTING navigateMonth SILENTLY REJECT THE WHOLE JUMP
+        let targetMonth = currentMonth;
+        if (config.navigation.respectMonthLimits) {
+            const yearLimits = config.processedLimits.years[targetYear];
+            if (yearLimits) {
+                const { minMonth, maxMonth } = yearLimits.months;
+                targetMonth = Math.max(minMonth, Math.min(maxMonth, currentMonth));
+            }
         }
 
+        const navDirection = (targetYear - currentYear) * 12 + (targetMonth - currentMonth);
+
+        // ONLY MARK THE CHIP ACTIVE AND CLOSE THE PICKER IF NAVIGATION ACTUALLY HAPPENED (OR WASN'T NEEDED) -
+        // OTHERWISE THE CHIP WOULD SHOW AS SELECTED WHILE THE CALENDAR SILENTLY STAYS ON THE OLD MONTH/YEAR
+        const navigated = navDirection ? this.navigateMonth(config, navDirection) : true;
+        if (!navigated) return;
+
+        // MARK THE CLICKED CHIP ACTIVE IMMEDIATELY (RATHER THAN VIA syncActiveYearChip/config.openCalendar) SINCE
+        // FOR 'slide'/'fade' TRANSITIONS config.openCalendar ISN'T ACTUALLY UPDATED UNTIL THE ANIMATION'S
+        // transitionend FIRES, WHICH WOULD OTHERWISE DELAY THE HIGHLIGHT BEHIND THE CLICK
         const activeClass = `${ccn}_active_year`;
-        clickedYearWrap.querySelector(`.${activeClass}`).classList.remove(activeClass);
+        const currentActive = clickedYearWrap.querySelector(`.${activeClass}`);
+        if (currentActive) currentActive.classList.remove(activeClass);
         clickedYear.classList.add(activeClass);
         setTimeout(() => {
             clickedYearWrap.classList.toggle(`${ccn}_close_status`);
         }, 100);
+    }
+
+    // CORE EVENT LISTENER FOR NAVIGATING TO MONTHS - NO SCROLL-INTO-VIEW NEEDED (UNLIKE handlerClickYearToNav)
+    // SINCE THE MONTHS PANEL ALWAYS HOLDS EXACTLY 12 CHIPS, ALL VISIBLE AT ONCE
+    handlerClickMonthToNav(clickedEl, event) {
+        const ccn = this.controller.ccn;
+        const clickedMonth = event.target.closest(`.${ccn}_month_header_title.${ccn}_clickable`);
+        if (!clickedMonth) return;
+
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+
+        const monthsWrap = document.querySelector(`#${config.id} .${ccn}_months_wrap`);
+        if (!monthsWrap) return;
+
+        monthsWrap.classList.toggle(`${ccn}_close_status`);
+    }
+
+    // CORE EVENT LISTENER FOR SELECTING MONTHS - ONLY EVER NAVIGATES WITHIN THE CURRENTLY ACTIVE YEAR (NO YEAR
+    // CROSS-TALK - CHANGING YEAR REMAINS THE YEAR PICKER'S JOB)
+    handlerClickMonth(clickedEl, event) {
+        const ccn = this.controller.ccn;
+        const clickedMonthWrap = event.target.closest(`.${ccn}_months_wrap`);
+        if (!clickedMonthWrap) return;
+
+        const clickedMonth = event.target.closest(`.${ccn}_month_choice`);
+        if (!clickedMonth) return;
+        if (clickedMonth.classList.contains(`${ccn}_disabled_month`)) return;
+
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+
+        const currentMonth = config.openCalendar.getMonth();
+        const targetMonth = parseInt(clickedMonth.getAttribute('data-month'), 10);
+
+        const direction = targetMonth - currentMonth;
+
+        const navigated = direction ? this.navigateMonth(config, direction) : true;
+        if (!navigated) return;
+
+        // MARK THE CLICKED CHIP ACTIVE IMMEDIATELY (RATHER THAN VIA A REBUILD/config.openCalendar) - SAME REASON
+        // AS handlerClickYear ABOVE: FOR 'slide'/'fade' TRANSITIONS config.openCalendar ISN'T ACTUALLY UPDATED
+        // UNTIL THE ANIMATION'S transitionend FIRES, WHICH WOULD OTHERWISE DELAY THE HIGHLIGHT BEHIND THE CLICK
+        const activeClass = `${ccn}_active_month`;
+        const currentActive = clickedMonthWrap.querySelector(`.${activeClass}`);
+        if (currentActive) currentActive.classList.remove(activeClass);
+        clickedMonth.classList.add(activeClass);
+        setTimeout(() => {
+            clickedMonthWrap.classList.toggle(`${ccn}_close_status`);
+        }, 100);
+    }
+
+    // CORE EVENT LISTENER FOR NAVIGATING TO TIME - ALSO APPLIES/WRITES THE CURRENTLY-ACTIVE TIME AS SOON AS THE
+    // PANEL IS OPENED, SO THE COMBINED DATE+TIME VALUE SHOWS UP EVEN IF THE USER NEVER TOUCHES AN HOUR/MINUTE
+    // WHEEL (AND EVEN IF NO DAY HAS BEEN CLICKED YET - buildFullValueString ALREADY FALLS BACK TO
+    // config.openCalendar FOR THE DATE PART IN THAT CASE). applyTimeChange (WHICH ALSO RE-FIRES onTimeChange AND
+    // RE-WRITES THE VALUE) ONLY RUNS ON OPEN, SINCE NOTHING CHANGES ON CLOSE - BUT onClickTime ITSELF STILL
+    // FIRES BOTH WAYS, WITH isOpen TELLING THE CONSUMER WHICH ONE HAPPENED.
+    handlerClickTimeToNav(clickedEl, event) {
+        const ccn = this.controller.ccn;
+        const clickedTrigger = event.target.closest(`.${ccn}_time_trigger`);
+        if (!clickedTrigger) return;
+
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+
+        const timeWrap = document.querySelector(`#${config.id} .${ccn}_time_wrap`);
+        if (!timeWrap) return;
+
+        const isNowClosed = timeWrap.classList.toggle(`${ccn}_close_status`);
+        const isOpen = !isNowClosed;
+
+        const fullValue = isOpen ? this.applyTimeChange(config) : this.controller.dateManager.buildFullValueString(config);
+
+        if (config.time.onClickTime) {
+            config.time.onClickTime(isOpen, fullValue, config.inputToAttach);
+        }
+    }
+
+    // UPDATES THE TIME TRIGGER LABEL AND WRITES THE COMBINED DATE+TIME VALUE - SHARED BY handlerClickTimeToNav/
+    // handlerClickHour/handlerClickMinute/handlerClickPeriod/settleWheelColumn SINCE ALL OF THEM END WITH THE
+    // SAME "RECOMPUTE AND WRITE" STEP. RETURNS THE COMPUTED VALUE SO CALLERS CAN PASS IT TO THEIR OWN MORE
+    // SPECIFIC CALLBACKS (onClickTime/onSelectHour/onSelectMinute) WITHOUT RECOMPUTING IT.
+    applyTimeChange(config) {
+        const ccn = this.controller.ccn;
+
+        const trigger = document.querySelector(`#${config.id} .${ccn}_time_trigger`);
+        const timeStr = this.controller.dateManager.formatTime(config, config.time.handler.activeHour, config.time.handler.activeMinute);
+        if (trigger) trigger.textContent = timeStr;
+
+        const fullValue = this.controller.dateManager.buildFullValueString(config);
+        if (config.day.displayDateAfterClick) {
+            this.controller.dateManager.writeValueToAttachedElement(config, fullValue);
+        }
+        // KEPT IN SYNC WITH DateManager.clickDayCoreFunctionality, WHICH ALSO SETS THIS UNCONDITIONALLY (NOT
+        // GATED BY displayDateAfterClick) ON A DAY CLICK - WITHOUT THIS, PICKING A TIME AFTER ALREADY PICKING A
+        // DAY LEFT THIS ATTRIBUTE STALE AT WHATEVER TIME WAS ACTIVE AT THE LAST DAY CLICK
+        config.inputToAttach.setAttribute('data-active-date', fullValue);
+
+        if (config.time.onTimeChange) {
+            config.time.onTimeChange(fullValue, config.time.handler.activeHour, config.time.handler.activeMinute, config.inputToAttach);
+        }
+
+        return fullValue;
+    }
+
+    // CONTINUOUS, INDEX-BASED (NOT getBoundingClientRect-BASED) MAGNIFICATION - EVERY CHIP HAS THE SAME FIXED
+    // --calendar-time-wheel-row-height, SO "HOW FAR IS CHIP j FROM THE CENTERED ROW" IS PURE ARITHMETIC ON
+    // scrollTop/rowHeight, NO FORCED LAYOUT READS PER CHIP. ONLY CHIPS WITHIN ±4 ROWS OF CENTER ARE TOUCHED
+    // (PLENTY WIDER THAN THE 5 VISIBLE ROWS) - iterATING EVERY CHIP IN A 300-ITEM MINUTE WHEEL ON EVERY SCROLL
+    // FRAME WOULD BE WASTEFUL FOR NO VISUAL BENEFIT, SINCE ANYTHING FURTHER OUT IS CLIPPED ANYWAY.
+    updateWheelMagnification(container, rowHeight) {
+        const centeredIndexFloat = container.scrollTop / rowHeight;
+        const children = container.children;
+        const from = Math.max(0, Math.floor(centeredIndexFloat - 4));
+        const to = Math.min(children.length - 1, Math.ceil(centeredIndexFloat + 4));
+
+        for (let j = from; j <= to; j++) {
+            const distanceRows = Math.abs(j - centeredIndexFloat);
+            const scale = Math.min(1.35, Math.max(0.7, 1.35 - distanceRows * 0.2));
+            const opacity = Math.min(1, Math.max(0.35, 1 - distanceRows * 0.25));
+            children[j].style.transform = `scale(${scale})`;
+            children[j].style.opacity = opacity;
+        }
+    }
+
+    // RUNS ONCE SCROLLING HAS SETTLED (DEBOUNCED IN attachWheelScrollListeners, NEVER MID-GESTURE, SO A LIVE
+    // NATIVE MOMENTUM FLICK IS NEVER INTERRUPTED): SILENTLY JUMPS BACK TO THE HOME (MIDDLE) COPY IF THE USER
+    // SCROLLED INTO A BUFFER COPY (THE "INFINITE WRAP" TRICK), THEN COMMITS THE NOW-CENTERED VALUE THE SAME WAY
+    // A CLICK WOULD.
+    settleWheelColumn(config, container, kind, rowHeight) {
+        const ccn = this.controller.ccn;
+        const totalItems = container.children.length;
+        const itemsPerCopy = totalItems / DOMManager.WHEEL_COPIES;
+
+        let nearestIndex = Math.round(container.scrollTop / rowHeight);
+        nearestIndex = Math.max(0, Math.min(totalItems - 1, nearestIndex));
+
+        const copyIndex = Math.floor(nearestIndex / itemsPerCopy);
+        if (copyIndex !== DOMManager.WHEEL_HOME_COPY_INDEX) {
+            const copyShift = DOMManager.WHEEL_HOME_COPY_INDEX - copyIndex;
+            container.scrollTop += copyShift * itemsPerCopy * rowHeight;
+            nearestIndex += copyShift * itemsPerCopy;
+        }
+
+        let chip = container.children[nearestIndex];
+        if (!chip) return;
+
+        // A CLICK ON A DISABLED CHIP IS SIMPLY REJECTED (handlerClickHour/handlerClickMinute BAIL BEFORE EVER
+        // CALLING THIS), BUT SCROLLING CAN PHYSICALLY LAND ON A DISABLED VALUE THAT A CLICK COULD NEVER REACH -
+        // SNAP TO THE NEAREST ENABLED CHIP WITHIN THE SAME (HOME) COPY INSTEAD OF COMMITTING A DISABLED VALUE.
+        // ACCEPTED EDGE CASE: IF THE ENTIRE HOME COPY IS DISABLED (E.G. A WEEKDAY WITH hourLimits EXCLUDING EVERY
+        // HOUR), NOTHING VALID EXISTS TO SNAP TO, SO THE ORIGINAL (DISABLED) CHIP IS COMMITTED AS A LAST RESORT.
+        const disabledClass = kind === 'hour' ? `${ccn}_disabled_hour` : `${ccn}_disabled_minute`;
+        if (chip.classList.contains(disabledClass)) {
+            const homeCopyStart = DOMManager.WHEEL_HOME_COPY_INDEX * itemsPerCopy;
+            const homeCopyEnd = homeCopyStart + itemsPerCopy;
+            let snapIndex = null;
+            for (let offset = 1; offset < itemsPerCopy && snapIndex === null; offset++) {
+                const upIndex = nearestIndex + offset;
+                const downIndex = nearestIndex - offset;
+                if (upIndex < homeCopyEnd && !container.children[upIndex].classList.contains(disabledClass)) {
+                    snapIndex = upIndex;
+                }
+                else if (downIndex >= homeCopyStart && !container.children[downIndex].classList.contains(disabledClass)) {
+                    snapIndex = downIndex;
+                }
+            }
+            if (snapIndex !== null) {
+                nearestIndex = snapIndex;
+                container.scrollTop = nearestIndex * rowHeight;
+                chip = container.children[nearestIndex];
+            }
+        }
+
+        if (kind === 'hour') {
+            config.time.handler.activeHour = this.resolveHourValueFromChip(config, chip);
+            const activeClass = `${ccn}_active_hour`;
+            const current = container.querySelector(`.${activeClass}`);
+            if (current) current.classList.remove(activeClass);
+            chip.classList.add(activeClass);
+
+            const fullValue = this.applyTimeChange(config);
+            if (config.time.onSelectHour) {
+                config.time.onSelectHour(config.time.handler.activeHour, fullValue, config.inputToAttach);
+            }
+        }
+        else {
+            config.time.handler.activeMinute = parseInt(chip.getAttribute('data-minute'), 10);
+            const activeClass = `${ccn}_active_minute`;
+            const current = container.querySelector(`.${activeClass}`);
+            if (current) current.classList.remove(activeClass);
+            chip.classList.add(activeClass);
+
+            const fullValue = this.applyTimeChange(config);
+            if (config.time.onSelectMinute) {
+                config.time.onSelectMinute(config.time.handler.activeMinute, fullValue, config.inputToAttach);
+            }
+        }
+    }
+
+    // ATTACHES THE PER-COLUMN scroll LISTENERS (scroll DOESN'T BUBBLE, SO THIS CAN'T GO THROUGH THE DOCUMENT-
+    // LEVEL DELEGATED-CLICK PATTERN EVERYTHING ELSE USES - EACH WHEEL NEEDS ITS OWN LISTENER, STORED IN
+    // config.functionsHandler FOR CLEANUP LIKE THIS CODEBASE'S OTHER NON-DELEGATED PER-INSTANCE LISTENERS).
+    // EACH SCROLL EVENT rAF-THROTTLES A CONTINUOUS MAGNIFICATION UPDATE AND DEBOUNCES A "HAS SCROLLING SETTLED"
+    // CHECK THAT COMMITS THE VALUE.
+    attachWheelScrollListeners(config, hoursContainer, minutesContainer) {
+        if (!config.functionsHandler) config.functionsHandler = {};
+
+        const rowHeight = parseFloat(getComputedStyle(hoursContainer).getPropertyValue('--calendar-time-wheel-row-height'));
+
+        const makeScrollHandler = (container, kind) => {
+            let rafPending = false;
+            let settleTimeout = null;
+
+            return () => {
+                if (!rafPending) {
+                    rafPending = true;
+                    requestAnimationFrame(() => {
+                        this.updateWheelMagnification(container, rowHeight);
+                        rafPending = false;
+                    });
+                }
+
+                clearTimeout(settleTimeout);
+                settleTimeout = setTimeout(() => {
+                    this.settleWheelColumn(config, container, kind, rowHeight);
+                }, 120);
+            };
+        };
+
+        config.functionsHandler._hoursWheelScroll = makeScrollHandler(hoursContainer, 'hour');
+        config.functionsHandler._minutesWheelScroll = makeScrollHandler(minutesContainer, 'minute');
+
+        hoursContainer.addEventListener('scroll', config.functionsHandler._hoursWheelScroll, { passive: true });
+        minutesContainer.addEventListener('scroll', config.functionsHandler._minutesWheelScroll, { passive: true });
+
+        // MAGNIFY THE INITIAL CENTERED VALUE RIGHT AWAY, BEFORE ANY SCROLL EVENT HAS HAPPENED
+        this.updateWheelMagnification(hoursContainer, rowHeight);
+        this.updateWheelMagnification(minutesContainer, rowHeight);
+    }
+
+    // data-hour12 IS THE DISPLAYED NUMERAL (1-12), NOT A RESOLVED 24H VALUE - RESOLVES IT AGAINST THE CURRENTLY
+    // ACTIVE AM/PM HALF (SEE createTimeChoices'S COMMENT ON WHY IT'S STORED THIS WAY). SHARED BY handlerClickHour
+    // AND settleWheelColumn SINCE BOTH NEED TO TURN "WHICH HOUR CHIP" INTO A REAL 24H VALUE THE SAME WAY.
+    resolveHourValueFromChip(config, chipEl) {
+        if (config.time.use12Hour) {
+            const hour12 = parseInt(chipEl.getAttribute('data-hour12'), 10);
+            const isPM = config.time.handler.activeHour >= 12;
+            return (hour12 % 12) + (isPM ? 12 : 0);
+        }
+        return parseInt(chipEl.getAttribute('data-hour'), 10);
+    }
+
+    // SCROLLS THE GIVEN CHIP TO DEAD-CENTER IN ITS WHEEL - COLLAPSES TO AN INSTANT JUMP UNDER
+    // prefers-reduced-motion:reduce, MIRRORING HOW --calendar-slide-duration COLLAPSES FOR THE MONTH SLIDE
+    scrollWheelChipToCenter(chipEl) {
+        const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        chipEl.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
+    }
+
+    // CORE EVENT LISTENER FOR SELECTING AN HOUR - DOES NOT CLOSE THE PANEL (UNLIKE handlerClickYear/
+    // handlerClickMonth) SINCE PICKING AN HOUR DOESN'T COMPLETE THE INTERACTION - THE USER STILL LIKELY WANTS TO
+    // PICK A MINUTE. THE PANEL ONLY CLOSES VIA handlerClickTimeToNav OR THE EXISTING CLICK-OUTSIDE BEHAVIOR.
+    // IMMEDIATE STATE UPDATE/FEEDBACK HAPPENS RIGHT AWAY (NOT WAITING FOR THE SCROLL-SETTLE DEBOUNCE) - THE
+    // scrollWheelChipToCenter CALL BELOW WILL ALSO RE-TRIGGER THE SETTLE HANDLER ONCE IT FINISHES, WHICH JUST
+    // HARMLESSLY RECOMPUTES THE SAME VALUE ALREADY SET HERE.
+    handlerClickHour(clickedEl, event) {
+        const ccn = this.controller.ccn;
+        const clickedTimeWrap = event.target.closest(`.${ccn}_time_wrap`);
+        if (!clickedTimeWrap) return;
+
+        const clickedHour = event.target.closest(`.${ccn}_hour_choice`);
+        if (!clickedHour) return;
+        if (clickedHour.classList.contains(`${ccn}_disabled_hour`)) return;
+
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+
+        config.time.handler.activeHour = this.resolveHourValueFromChip(config, clickedHour);
+
+        const activeClass = `${ccn}_active_hour`;
+        const currentActive = clickedTimeWrap.querySelector(`.${ccn}_hours_container .${activeClass}`);
+        if (currentActive) currentActive.classList.remove(activeClass);
+        clickedHour.classList.add(activeClass);
+
+        const fullValue = this.applyTimeChange(config);
+        if (config.time.onSelectHour) {
+            config.time.onSelectHour(config.time.handler.activeHour, fullValue, config.inputToAttach);
+        }
+        this.scrollWheelChipToCenter(clickedHour);
+    }
+
+    // CORE EVENT LISTENER FOR SELECTING A MINUTE - SAME NO-AUTO-CLOSE REASONING AS handlerClickHour
+    handlerClickMinute(clickedEl, event) {
+        const ccn = this.controller.ccn;
+        const clickedTimeWrap = event.target.closest(`.${ccn}_time_wrap`);
+        if (!clickedTimeWrap) return;
+
+        const clickedMinute = event.target.closest(`.${ccn}_minute_choice`);
+        if (!clickedMinute) return;
+        if (clickedMinute.classList.contains(`${ccn}_disabled_minute`)) return;
+
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+
+        config.time.handler.activeMinute = parseInt(clickedMinute.getAttribute('data-minute'), 10);
+
+        const activeClass = `${ccn}_active_minute`;
+        const currentActive = clickedTimeWrap.querySelector(`.${ccn}_minutes_container .${activeClass}`);
+        if (currentActive) currentActive.classList.remove(activeClass);
+        clickedMinute.classList.add(activeClass);
+
+        const fullValue = this.applyTimeChange(config);
+        if (config.time.onSelectMinute) {
+            config.time.onSelectMinute(config.time.handler.activeMinute, fullValue, config.inputToAttach);
+        }
+        this.scrollWheelChipToCenter(clickedMinute);
+    }
+
+    // CORE EVENT LISTENER FOR TOGGLING AM/PM - ONLY EVER MATCHES ANYTHING ON A use12Hour CALENDAR, SINCE THE
+    // PERIOD TOGGLE IS ONLY BUILT FOR THOSE (SEE createTimeChoices). FLIPS activeHour BY ±12 WITHOUT TOUCHING THE
+    // HOUR CHIPS THEMSELVES - THEY'RE KEYED OFF activeHour % 12, WHICH THIS NEVER CHANGES.
+    handlerClickPeriod(clickedEl, event) {
+        const ccn = this.controller.ccn;
+        const clickedTimeWrap = event.target.closest(`.${ccn}_time_wrap`);
+        if (!clickedTimeWrap) return;
+
+        const clickedPeriod = event.target.closest(`.${ccn}_period_choice`);
+        if (!clickedPeriod) return;
+
+        const config = this.controller.configManager.getConfigById(clickedEl.id);
+
+        const targetIsPM = clickedPeriod.getAttribute('data-period') === 'PM';
+        config.time.handler.activeHour = (config.time.handler.activeHour % 12) + (targetIsPM ? 12 : 0);
+
+        const activeClass = `${ccn}_active_period`;
+        const currentActive = clickedTimeWrap.querySelector(`.${ccn}_period_container .${activeClass}`);
+        if (currentActive) currentActive.classList.remove(activeClass);
+        clickedPeriod.classList.add(activeClass);
+
+        // TOGGLING AM/PM CHANGES THE UNDERLYING 24H activeHour EVEN THOUGH THE DISPLAYED NUMERAL DOESN'T -
+        // COUNTS AS AN HOUR CHANGE FROM THE CONSUMER'S PERSPECTIVE, SO onSelectHour FIRES HERE TOO
+        const fullValue = this.applyTimeChange(config);
+        if (config.time.onSelectHour) {
+            config.time.onSelectHour(config.time.handler.activeHour, fullValue, config.inputToAttach);
+        }
+
+        // THE SAME data-hour12 CHIP NOW RESOLVES TO A DIFFERENT REAL HOUR, SO ITS DISABLED STATUS CAN FLIP -
+        // IF THE (JUST-TOGGLED) activeHour TURNS OUT TO BE DISABLED UNDER THE ACTIVE WEEKDAY'S hourLimits, THIS
+        // CLAMPS IT AND RE-FIRES applyTimeChange/onSelectHour AGAIN WITH THE CLAMPED VALUE - A RARE DOUBLE-FIRE
+        // EDGE CASE (AM/PM TOGGLE LANDING EXACTLY OUT OF RANGE) ACCEPTED FOR SIMPLICITY
+        this.controller.domManager.refreshHourWheelDisabledState(config);
     }
 
     // CORE EVENT LISTENER FOR SELECTING DAYS
@@ -475,6 +1048,15 @@ class EventHandler {
     onClickDayAction(clickedEl, config, runAllFunctions = true) {
         this.controller.dateManager.clickDayCoreFunctionality(clickedEl, config);
 
+        // THE CLICKED DAY MAY HAVE A DIFFERENT WEEKDAY THAN WHATEVER WAS ACTIVE BEFORE, SO THE HOUR WHEEL'S
+        // DISABLED SET (WEEKDAY-DEPENDENT) NEEDS RE-EVALUATING - ALSO COVERS THE initDate PATH SINCE THAT ALSO
+        // ROUTES THROUGH THIS SAME FUNCTION (SEE DOMManager.createMonthBody). THE TIME TRIGGER ITSELF IS HIDDEN
+        // UNTIL A DAY IS ACTIVE (SEE DOMManager.createTimeTriggerRow) - REVEAL IT NOW THAT ONE IS.
+        if (config.time.enabled) {
+            this.controller.domManager.refreshHourWheelDisabledState(config);
+            this.controller.domManager.openElement(config.coreElements.timeTriggerWrap);
+        }
+
         // HERE ADD THE CUSTOM EVENT LISTENER FROM THE USER
         if (config.day.onClickDay && runAllFunctions) {
             config.day.onClickDay(clickedEl.getAttribute('data-date'), clickedEl, config.inputToAttach);
@@ -492,17 +1074,11 @@ class EventHandler {
 
     // ON POINTER MOVE, FOLLOW LISTENER
     handleMouseMove(event) {
-        const ccn = this.controller.ccn;
-        const cursorEl = document.querySelector(`.input_${ccn}_outer_wrap .${ccn}_cursor_to_follow`);
-        if (!cursorEl) {
-            document.removeEventListener('pointermove', this.controller.mouseMoveEventsDelegation);
-            return;
-        }
-
-        const hoveredPicker = event.target.closest(`.input_${ccn}_outer_wrap`);
+        const hoveredPicker = event.target.closest(`.input_${this.controller.ccn}_outer_wrap`);
         if (!hoveredPicker) return;
 
         this.handlerMousemoveYear(hoveredPicker, event);
+        this.handlerMousemoveMonth(hoveredPicker, event);
     }
 
     handlerMousemoveYear(hoveredPicker, event) {
@@ -511,7 +1087,9 @@ class EventHandler {
 
         const config = this.controller.configManager.getConfigById(hoveredPicker.id);
 
-        const cursorEl = document.querySelector(`#${config.id} .${ccn}_cursor_to_follow`);
+        // SCOPED TO .years_wrap (NOT JUST #config.id) SINCE THE MONTHS PANEL HAS ITS OWN, SEPARATE
+        // .cursor_to_follow ELEMENT SHARING THE SAME CLASS UNDER THE SAME CALENDAR ID
+        const cursorEl = document.querySelector(`#${config.id} .${ccn}_years_wrap .${ccn}_cursor_to_follow`);
         if (!cursorEl) return;
 
         cursorEl.style.opacity = '0';
@@ -522,6 +1100,32 @@ class EventHandler {
 
 
         const { top, left } = yearContainerEl.getBoundingClientRect();
+
+        const offsetX = event.clientX - left;
+        const offsetY = event.clientY - top;
+
+        requestAnimationFrame(() => {
+            cursorEl.style.top = `${offsetY}px`;
+            cursorEl.style.left = `${offsetX}px`;
+        });
+    }
+
+    handlerMousemoveMonth(hoveredPicker, event) {
+        const ccn = this.controller.ccn;
+        const monthContainerEl = event.target.closest(`.${ccn}_months_container`);
+
+        const config = this.controller.configManager.getConfigById(hoveredPicker.id);
+
+        const cursorEl = document.querySelector(`#${config.id} .${ccn}_months_wrap .${ccn}_cursor_to_follow`);
+        if (!cursorEl) return;
+
+        cursorEl.style.opacity = '0';
+        cursorEl.style.visibility = 'hidden';
+        if (!monthContainerEl) return;
+        cursorEl.style.opacity = '0.8';
+        cursorEl.style.visibility = 'visible';
+
+        const { top, left } = monthContainerEl.getBoundingClientRect();
 
         const offsetX = event.clientX - left;
         const offsetY = event.clientY - top;
@@ -567,6 +1171,8 @@ class DOMManager {
         this.closeElement(config.coreElements.calendarInnerWrap);
         this.closeElement(config.coreElements.helperBody);
         this.closeElement(config.coreElements.yearsWrap);
+        this.closeElement(config.coreElements.monthsWrap);
+        this.closeElement(config.coreElements.timeWrap);
         this.closeElement(config.coreElements.mobileLayerWrap);
 
         const element = config.inputToAttach;
@@ -626,6 +1232,7 @@ class DOMManager {
         this.createMonthHeader(config, wraps[1]);
         const monthBody = this.createMonthBodyWrapper(wraps[1]);
         this.createMonthBody(config, monthBody);
+        const timeTriggerWrap = this.createTimeTriggerRow(config, wraps[1]);
 
         // STEP 5: CREATE HELPER WINDOW WRAP
         const helperBody = this.createHelperWrapper(outerWrap);
@@ -637,6 +1244,23 @@ class DOMManager {
         if (config.clickable && config.year.clickable) {
             yearsWrap = this.createYearsWrap(outerWrap);
             followCursorEl = this.createAllYearChoices(config, yearsWrap);
+        }
+
+        // STEP 6B: CREATE MONTH WRAP AND OPTIONS IF CONFIG ALLOWS MONTH CLICKING - SAME GATING PATTERN AS THE
+        // YEAR WRAP ABOVE, INDEPENDENT OF IT (A CALENDAR CAN HAVE EITHER PANEL, BOTH, OR NEITHER)
+        let monthsWrap = null;
+        let monthsFollowCursorEl = null;
+        if (config.clickable && config.month.clickable) {
+            monthsWrap = this.createMonthsWrap(outerWrap);
+            monthsFollowCursorEl = this.createAllMonthChoices(config, monthsWrap);
+        }
+
+        // STEP 6C: CREATE TIME WRAP AND CHOICES IF CONFIG ALLOWS TIME SELECTION - NEVER BUILT IN RANGE-SELECT
+        // MODE, TIME IS A SINGLE-DATE-ONLY CONCEPT (SEE Calendar_Controller's time config comment)
+        let timeWrap = null;
+        if (config.clickable && config.time.enabled && !config.day.rangeSelect) {
+            timeWrap = this.createTimeWrap(outerWrap);
+            this.createTimeChoices(config, timeWrap);
         }
 
         // STEP 7: CREATE MOBILE OVERLAY FOR THE CALENDAR (IF NECESSARY)
@@ -655,8 +1279,14 @@ class DOMManager {
             helperBody,
             yearsWrap,
             followCursor: followCursorEl,
+            monthsWrap,
+            monthsFollowCursor: monthsFollowCursorEl,
+            timeWrap,
+            timeTriggerWrap,
             mobileLayerWrap,
-            loaderOverlay
+            loaderOverlay,
+            monthBodyTrack: monthBody.parentElement,
+            monthBodyViewport: monthBody.parentElement.parentElement
         };
 
         // STEP 10: APPLY STYLES AND EVENT HANDLERS TO THE CALENDAR
@@ -687,8 +1317,11 @@ class DOMManager {
 
     createOuterWrap(config) {
         const outerWrap = document.createElement('div');
-        outerWrap.className = `input_${this.controller.ccn}_outer_wrap`;
+        outerWrap.className = `input_${this.controller.ccn}_outer_wrap ${this.controller.ccn}_layout_${config.layout}`;
         outerWrap.id = config.id;
+        // SCOPES style.transitions.monthNavigation TO THIS CALENDAR'S OWN OUTER WRAP - THE reduced-motion MEDIA
+        // QUERY IN calendar.css OVERRIDES THIS VARIABLE WITH !important SO IT STILL WINS OVER THIS INLINE VALUE
+        outerWrap.style.setProperty('--calendar-slide-duration', `${config.style.transitions.monthNavigation}ms`);
         document.body.appendChild(outerWrap);
         this.closeElement(outerWrap);
         return outerWrap;
@@ -698,6 +1331,13 @@ class DOMManager {
         const cursor = document.createElement('span');
         cursor.className = `${this.controller.ccn}_cursor_to_follow`;
         yearsContainer.appendChild(cursor);
+        return cursor;
+    }
+
+    addCursorFollowInMonth(monthsContainer) {
+        const cursor = document.createElement('span');
+        cursor.className = `${this.controller.ccn}_cursor_to_follow`;
+        monthsContainer.appendChild(cursor);
         return cursor;
     }
 
@@ -727,6 +1367,22 @@ class DOMManager {
         });
 
         return yearsWrap;
+    }
+
+    createMonthsWrap(outerWrap) {
+        const monthsWrap = document.createElement('div');
+        monthsWrap.className = `${this.controller.ccn}_months_wrap`;
+        outerWrap.appendChild(monthsWrap);
+
+        this.closeElement(monthsWrap);
+
+        Calendar_Controller.domReadyPromise.then(() => {
+            if (this.ifFirefox() && monthsWrap) {
+                monthsWrap.classList.add('firefox-scroll');
+            }
+        });
+
+        return monthsWrap;
     }
 
     createAllYearChoices(config, yearsWrap) {
@@ -760,6 +1416,45 @@ class DOMManager {
         return cursor;
     }
 
+    // BUILDS ALL 12 MONTH CHOICES FOR THE CURRENTLY ACTIVE YEAR (config.openCalendar.getFullYear()) - UNLIKE
+    // createAllYearChoices, THIS IS MEANT TO BE CALLED ON EVERY NAVIGATION, NOT JUST WHEN LIMITS CHANGE, SINCE
+    // WHICH MONTHS ARE ENABLED DEPENDS ON THE ACTIVE YEAR (config.processedLimits.years[year].months). SEE
+    // rebuildMonthsPicker, WHICH IS THE FULL-REBUILD ENTRY POINT CALLED FROM EVERY NAV-COMMIT PATH.
+    createAllMonthChoices(config, monthsWrap) {
+        const ccn = this.controller.ccn;
+        const monthsContainer = document.createElement('div');
+        monthsContainer.className = `${ccn}_months_container`;
+
+        const activeYear = config.openCalendar.getFullYear();
+        const activeMonth = config.openCalendar.getMonth();
+        const { minMonth, maxMonth } = config.processedLimits.years[activeYear].months;
+
+        for (let m = 0; m <= 11; m++) {
+            const monthElement = document.createElement('span');
+            let extraClass = '';
+            if (activeMonth === m) {
+                extraClass += ` ${ccn}_active_month`;
+            }
+            if (m < minMonth || m > maxMonth) {
+                extraClass += ` ${ccn}_disabled_month`;
+            }
+            monthElement.className = `${ccn}_month_choice${extraClass}`;
+            monthElement.textContent = config.language.months[m];
+            monthElement.setAttribute('data-month', m);
+
+            monthsContainer.appendChild(monthElement);
+        }
+
+        let cursor = null;
+        if (config.cursorEffect) {
+            cursor = this.addCursorFollowInMonth(monthsContainer);
+        }
+
+        monthsWrap.appendChild(monthsContainer);
+
+        return cursor;
+    }
+
     // REBUILDS THE YEAR-PICKER LIST AFTER processedLimits CHANGES (E.G. updateYearLimits) - createAllYearChoices
     // ONLY EVER APPENDS, SO THE OLD CONTAINER MUST BE CLEARED FIRST OR THE OLD/NEW YEAR LISTS WOULD BOTH SHOW
     rebuildYearsPicker(config) {
@@ -768,6 +1463,243 @@ class DOMManager {
 
         yearsWrap.innerHTML = '';
         config.coreElements.followCursor = this.createAllYearChoices(config, yearsWrap);
+    }
+
+    // REBUILDS THE MONTH-PICKER PANEL FROM SCRATCH ON EVERY NAVIGATION (ARROW/DRAG/YEAR-PICK/setOpenCalendar/
+    // updateYearLimits) - UNLIKE THE YEAR PICKER'S SPLIT BETWEEN A RARE FULL REBUILD AND A CHEAP PER-NAV ACTIVE-
+    // CHIP SYNC, HERE BOTH "WHICH MONTHS ARE ENABLED" AND "WHICH MONTH IS ACTIVE" CAN CHANGE ON THE SAME EVENT
+    // (ANY NAV THAT CROSSES A YEAR BOUNDARY), SO THERE'S NO SUCH SPLIT TO EXPLOIT - AND AT ONLY 12 ELEMENTS, A
+    // FULL REBUILD EVERY TIME IS CHEAP AND LEAVES NO STALE STATE THAT A MISSED CALL SITE COULD FORGET TO SYNC
+    // (SEE THE BUG THAT SAME GAP CAUSED FOR syncActiveYearChip).
+    rebuildMonthsPicker(config) {
+        const monthsWrap = config.coreElements?.monthsWrap;
+        if (!monthsWrap) return;
+
+        monthsWrap.innerHTML = '';
+        config.coreElements.monthsFollowCursor = this.createAllMonthChoices(config, monthsWrap);
+    }
+
+    // UNLIKE createYearsWrap/createMonthsWrap, THIS ELEMENT ITSELF NEVER SCROLLS - THE HOUR/MINUTE WHEEL COLUMNS
+    // INSIDE IT EACH SCROLL INDEPENDENTLY (SEE createTimeChoices/createWheelColumn), SO NO Firefox-scroll CLASS
+    // OR SCROLLBAR STYLING IS NEEDED ON THIS WRAP ITSELF
+    createTimeWrap(outerWrap) {
+        const timeWrap = document.createElement('div');
+        timeWrap.className = `${this.controller.ccn}_time_wrap`;
+        outerWrap.appendChild(timeWrap);
+
+        this.closeElement(timeWrap);
+
+        return timeWrap;
+    }
+
+    // NUMBER OF TIMES THE BASE VALUE LIST (0-23, 1-12, OR THE STEPPED MINUTE LIST) IS DUPLICATED BACK-TO-BACK IN
+    // EACH WHEEL COLUMN, TO FAKE INFINITE SCROLL VIA THE STANDARD "BUFFER + SILENT RESET" TRICK (SEE
+    // EventHandler's SCROLL-SETTLE HANDLER, WHICH JUMPS scrollTop BACK TO THE MIDDLE COPY WHENEVER THE USER
+    // SCROLLS INTO ANY OTHER COPY). 5 GIVES 2 SPARE COPIES ON EITHER SIDE OF THE "HOME" MIDDLE COPY (INDEX 2),
+    // ENOUGH BUFFER THAT A SINGLE STRONG FLICK CAN'T OUTRUN IT BEFORE THE NEXT SETTLE CHECK.
+    static WHEEL_COPIES = 5;
+    static WHEEL_HOME_COPY_INDEX = 2;
+
+    // BUILDS ONE WHEEL COLUMN (HOURS OR MINUTES): choiceClass DUPLICATED WHEEL_COPIES TIMES OVER `values`
+    // (EACH {label, value}), MARKING ONLY THE MIDDLE COPY'S MATCHING ENTRY active SO EXACTLY ONE CHIP STARTS
+    // ACTIVE, AND (IF disabledClass/isDisabledFn ARE GIVEN) MARKING EVERY COPY OF ANY VALUE isDisabledFn REJECTS.
+    // RETURNS { container, homeIndex } - THE CALLER MUST SET container.scrollTop = homeIndex * rowHeight
+    // ITSELF, ONLY AFTER container IS ATTACHED TO THE LIVE DOCUMENT (getComputedStyle ON A DETACHED NODE CAN'T
+    // RESOLVE THE INHERITED --calendar-time-wheel-row-height VAR, AND scrollTop IS MEANINGLESS BEFORE LAYOUT
+    // ANYWAY) - SEE createTimeChoices, WHICH DOES THIS ONCE THE WHOLE PANEL IS APPENDED.
+    createWheelColumn(containerClass, choiceClass, activeClass, dataAttr, values, activeValue, disabledClass = null, isDisabledFn = null) {
+        const container = document.createElement('div');
+        container.className = containerClass;
+
+        for (let copy = 0; copy < DOMManager.WHEEL_COPIES; copy++) {
+            values.forEach((v) => {
+                const el = document.createElement('span');
+                const isActive = copy === DOMManager.WHEEL_HOME_COPY_INDEX && v.value === activeValue;
+                const isDisabled = isDisabledFn && isDisabledFn(v.value);
+                el.className = `${choiceClass}${isActive ? ` ${activeClass}` : ''}${isDisabled ? ` ${disabledClass}` : ''}`;
+                el.textContent = v.label;
+                el.setAttribute(dataAttr, v.value);
+                container.appendChild(el);
+            });
+        }
+
+        const realIndex = values.findIndex((v) => v.value === activeValue);
+        const homeIndex = DOMManager.WHEEL_HOME_COPY_INDEX * values.length + realIndex;
+
+        return { container, homeIndex };
+    }
+
+    // BUILDS THE HOUR/MINUTE WHEELS (AND, FOR 12-HOUR MODE, AN AM/PM ROW BELOW THEM). UNLIKE THE MONTH PICKER,
+    // NOTHING ABOUT MONTH/YEAR NAVIGATION EVER INVALIDATES THIS PANEL'S CONTENT, SO THERE IS NO rebuildXPicker-
+    // STYLE ENTRY POINT CALLED FROM NAV-COMMIT PATHS - THIS IS ONLY EVER CALLED ONCE, AT FIRST BUILD, AND THE
+    // PANEL IS OTHERWISE UPDATED IN PLACE BY EventHandler's OWN SCROLL/CLICK HANDLERS.
+    createTimeChoices(config, timeWrap) {
+        const ccn = this.controller.ccn;
+        const timeContainer = document.createElement('div');
+        timeContainer.className = `${ccn}_time_container`;
+
+        const wheelsRow = document.createElement('div');
+        wheelsRow.className = `${ccn}_wheels_row`;
+
+        const activeHour = config.time.handler.activeHour;
+        const activeMinute = config.time.handler.activeMinute;
+        const isPM = activeHour >= 12;
+
+        // AM/PM ROW - BELOW THE WHEELS, ONLY FOR 12-HOUR MODE
+        if (config.time.use12Hour) {
+            const periodContainer = document.createElement('div');
+            periodContainer.className = `${ccn}_period_container`;
+
+            ['AM', 'PM'].forEach((label) => {
+                const periodElement = document.createElement('span');
+                const isActivePeriod = (label === 'PM') === isPM;
+                periodElement.className = `${ccn}_period_choice${isActivePeriod ? ` ${ccn}_active_period` : ''}`;
+                periodElement.textContent = label;
+                periodElement.setAttribute('data-period', label);
+                periodContainer.appendChild(periodElement);
+            });
+
+            timeContainer.appendChild(periodContainer);
+        }
+
+        // HOURS WHEEL - 12 VALUES (12,1..11) FOR 12-HOUR MODE, OR 24 VALUES (0-23) FOR 24-HOUR MODE. 12-HOUR
+        // CHIPS STORE THE DISPLAYED NUMERAL (data-hour12, 1-12), NOT A RESOLVED 24H VALUE - THE ACTUAL 24H VALUE
+        // DEPENDS ON THE SEPARATE AM/PM TOGGLE TOO, AND KEEPING IT OUT OF THIS ATTRIBUTE MEANS TOGGLING AM/PM
+        // LATER (handlerClickPeriod) NEVER NEEDS TO REGENERATE THIS WHEEL - ONLY THE PERIOD TOGGLE'S OWN ACTIVE
+        // CLASS CHANGES. THE MATCHING CHIP IS keyed OFF activeHour % 12 (WITH 12 MATCHING 0, SO MIDNIGHT/NOON
+        // BOTH CORRECTLY CENTER THE "12" CHIP).
+        // HOUR LIMITS ARE WEEKDAY-DEPENDENT (config.time.processedLimits.weekdayLimits) - data-hour12 CHIPS ARE
+        // RESOLVED TO A REAL 24H VALUE AGAINST THE CURRENT AM/PM HALF (isPM, ABOVE), MATCHING THE EXACT SAME
+        // RESOLUTION EventHandler.resolveHourValueFromChip USES ELSEWHERE FOR THESE CHIPS
+        const hourLimits = this.controller.dateManager.getActiveWeekdayHourLimits(config);
+        const isHourDisabled = (chipValue) => {
+            const realHour = config.time.use12Hour
+                ? (chipValue % 12) + (isPM ? 12 : 0)
+                : chipValue;
+            return realHour < hourLimits[0] || realHour > hourLimits[1];
+        };
+
+        let hourValues, activeHourValue, hourDataAttr;
+        if (config.time.use12Hour) {
+            hourValues = [];
+            for (let h12 = 1; h12 <= 12; h12++) hourValues.push({ label: String(h12).padStart(2, '0'), value: h12 });
+            activeHourValue = activeHour % 12 === 0 ? 12 : activeHour % 12;
+            hourDataAttr = 'data-hour12';
+        }
+        else {
+            hourValues = [];
+            for (let h = 0; h <= 23; h++) hourValues.push({ label: String(h).padStart(2, '0'), value: h });
+            activeHourValue = activeHour;
+            hourDataAttr = 'data-hour';
+        }
+        const hoursWheel = this.createWheelColumn(`${ccn}_hours_container`, `${ccn}_hour_choice`, `${ccn}_active_hour`, hourDataAttr, hourValues, activeHourValue, `${ccn}_disabled_hour`, isHourDisabled);
+        const hoursContainer = hoursWheel.container;
+
+        // MINUTES WHEEL - STEPPED BY config.time.minuteStep (E.G. STEP 15 -> 00/15/30/45). minuteLimits ARE GLOBAL
+        // (NOT WEEKDAY-DEPENDENT), SO THIS DISABLED SET IS COMPUTED ONCE HERE AND NEVER REVISITED
+        const minuteLimits = config.time.processedLimits.minuteLimits;
+        const isMinuteDisabled = (m) => m < minuteLimits[0] || m > minuteLimits[1];
+
+        const minuteValues = [];
+        for (let m = 0; m <= 59; m += config.time.minuteStep) minuteValues.push({ label: String(m).padStart(2, '0'), value: m });
+        const minutesWheel = this.createWheelColumn(`${ccn}_minutes_container`, `${ccn}_minute_choice`, `${ccn}_active_minute`, 'data-minute', minuteValues, activeMinute, `${ccn}_disabled_minute`, isMinuteDisabled);
+        const minutesContainer = minutesWheel.container;
+
+        wheelsRow.appendChild(hoursContainer);
+
+        // CENTER-SELECTION BAND - A STATIC, NON-INTERACTIVE VISUAL ANCHOR FOR "THIS IS THE SELECTED ROW",
+        // INDEPENDENT OF THE SCROLL-DRIVEN SCALE EFFECT ON THE CHIPS THEMSELVES
+        const centerBand = document.createElement('div');
+        centerBand.className = `${ccn}_wheel_center_band`;
+        wheelsRow.appendChild(centerBand);
+
+        wheelsRow.appendChild(minutesContainer);
+        timeContainer.appendChild(wheelsRow);
+
+        timeWrap.appendChild(timeContainer);
+
+        // NOW THAT THE PANEL IS ATTACHED TO THE LIVE DOCUMENT, getComputedStyle CAN RESOLVE THE INHERITED
+        // --calendar-time-wheel-row-height VAR - POSITION BOTH WHEELS SO THEIR ACTIVE VALUE STARTS DEAD-CENTER
+        const rowHeight = parseFloat(getComputedStyle(hoursContainer).getPropertyValue('--calendar-time-wheel-row-height'));
+        hoursContainer.scrollTop = hoursWheel.homeIndex * rowHeight;
+        minutesContainer.scrollTop = minutesWheel.homeIndex * rowHeight;
+
+        this.controller.eventHandler.attachWheelScrollListeners(config, hoursContainer, minutesContainer);
+    }
+
+    // RE-EVALUATES WHICH HOUR CHIPS ARE DISABLED WITHOUT REBUILDING ANYTHING (NO DOM REGENERATION, NO SCROLL
+    // DISTURBANCE UNLESS THE ACTIVE HOUR ITSELF IS NOW OUT OF RANGE) - CALLED AFTER A DAY CLICK (THE ACTIVE
+    // WEEKDAY MAY HAVE CHANGED) AND AFTER AN AM/PM TOGGLE (THE SAME data-hour12 CHIP RESOLVES TO A DIFFERENT REAL
+    // HOUR). IF THE CURRENTLY ACTIVE HOUR IS NOW DISABLED, CLAMPS IT TO THE NEAREST BOUND OF THE NEW RANGE, MOVES
+    // THE ACTIVE CLASS AND SCROLL POSITION TO THAT CHIP (WITHIN THE SAME WHEEL COPY THE OLD ACTIVE CHIP WAS IN, SO
+    // THE JUMP STAYS LOCAL RATHER THAN CROSSING COPIES), AND RE-APPLIES THE TIME CHANGE.
+    refreshHourWheelDisabledState(config) {
+        const ccn = this.controller.ccn;
+        const hoursContainer = config.coreElements?.timeWrap?.querySelector(`.${ccn}_hours_container`);
+        if (!hoursContainer) return;
+
+        const hourLimits = this.controller.dateManager.getActiveWeekdayHourLimits(config);
+        const disabledClass = `${ccn}_disabled_hour`;
+        const activeClass = `${ccn}_active_hour`;
+        const children = Array.from(hoursContainer.children);
+
+        let activeIndex = -1;
+        children.forEach((chip, index) => {
+            const realHour = this.controller.eventHandler.resolveHourValueFromChip(config, chip);
+            const isDisabled = realHour < hourLimits[0] || realHour > hourLimits[1];
+            chip.classList.toggle(disabledClass, isDisabled);
+            if (chip.classList.contains(activeClass)) activeIndex = index;
+        });
+
+        if (activeIndex === -1) return;
+        const activeChip = children[activeIndex];
+        if (!activeChip.classList.contains(disabledClass)) return;
+
+        const clampedHour = Math.max(hourLimits[0], Math.min(hourLimits[1], config.time.handler.activeHour));
+        config.time.handler.activeHour = clampedHour;
+
+        const itemsPerCopy = children.length / DOMManager.WHEEL_COPIES;
+        const copyStart = Math.floor(activeIndex / itemsPerCopy) * itemsPerCopy;
+
+        let targetChip = null;
+        for (let i = copyStart; i < copyStart + itemsPerCopy; i++) {
+            if (this.controller.eventHandler.resolveHourValueFromChip(config, children[i]) === clampedHour) {
+                targetChip = children[i];
+                break;
+            }
+        }
+        if (!targetChip) return;
+
+        activeChip.classList.remove(activeClass);
+        targetChip.classList.add(activeClass);
+
+        const rowHeight = parseFloat(getComputedStyle(hoursContainer).getPropertyValue('--calendar-time-wheel-row-height'));
+        hoursContainer.scrollTop = children.indexOf(targetChip) * rowHeight;
+
+        const fullValue = this.controller.eventHandler.applyTimeChange(config);
+        if (config.time.onSelectHour) {
+            config.time.onSelectHour(config.time.handler.activeHour, fullValue, config.inputToAttach);
+        }
+    }
+
+    // KEEPS THE YEAR-PICKER'S HIGHLIGHTED CHIP IN SYNC WITH config.openCalendar. THE CHIP IS ONLY EVER MARKED
+    // ACTIVE AT FIRST RENDER (createAllYearChoices, ABOVE) OR WHEN THE USER MANUALLY PICKS A YEAR FROM THE LIST
+    // (EventHandler.handlerClickYear) - EVERY OTHER WAY THE OPEN YEAR CAN CHANGE (ARROW NAV, DRAG, setOpenCalendar,
+    // updateYearLimits) NEVER TOUCHED IT, SO E.G. A DRAG THAT CROSSED A YEAR BOUNDARY LEFT THE OLD YEAR HIGHLIGHTED
+    // THE NEXT TIME THE PICKER WAS OPENED, EVEN THOUGH THE MONTH BODY WAS ALREADY SHOWING THE NEW YEAR.
+    syncActiveYearChip(config) {
+        const ccn = this.controller.ccn;
+        const yearsWrap = config.coreElements?.yearsWrap;
+        if (!yearsWrap) return;
+
+        const activeClass = `${ccn}_active_year`;
+        const targetYear = config.openCalendar.getFullYear();
+        const currentActive = yearsWrap.querySelector(`.${activeClass}`);
+        if (currentActive && parseInt(currentActive.getAttribute('data-year'), 10) === targetYear) return;
+
+        if (currentActive) currentActive.classList.remove(activeClass);
+        const targetEl = yearsWrap.querySelector(`[data-year='${targetYear}']`);
+        if (targetEl) targetEl.classList.add(activeClass);
     }
 
     createMobileOverlay() {
@@ -821,11 +1753,183 @@ class DOMManager {
         }
     }
 
+    // VIEWPORT (overflow:hidden window) > TRACK (flex row, translateX'd to reveal one side or the other) >
+    // .month_body (the day grid, unchanged class/return contract - every existing querySelector('.month_body')
+    // caller keeps working since it's just nested one level deeper now). USED BY slideToMonth/DRAG NAVIGATION.
     createMonthBodyWrapper(wrap) {
+        const ccn = this.controller.ccn;
+
+        const viewport = document.createElement('div');
+        viewport.className = `${ccn}_month_body_viewport`;
+        wrap.appendChild(viewport);
+
+        const track = document.createElement('div');
+        track.className = `${ccn}_month_body_track`;
+        viewport.appendChild(track);
+
         const monthBody = document.createElement('div');
-        monthBody.className = `${this.controller.ccn}_month_body`;
-        wrap.appendChild(monthBody);
+        monthBody.className = `${ccn}_month_body`;
+        track.appendChild(monthBody);
         return monthBody;
+    }
+
+    // SHARED ENTRY POINT FOR INSTANT (NON-DRAG) MONTH NAVIGATION - USED BY navigateMonth (ARROW CLICK /
+    // YEAR-SELECT). DISPATCHES ON config.navigation.transition. DRAG NAVIGATION IN EventHandler NEVER CALLS
+    // THIS - IT REUSES THE SAME PEEK-GRID/TRACK TECHNIQUE AS 'slide' BUT DRIVES THE TRANSFORM IMPERATIVELY
+    // FRAME-BY-FRAME, ALWAYS, REGARDLESS OF THIS SETTING.
+    slideToMonth(config, direction) {
+        if (config.slide.active) return false; // IGNORE RE-ENTRANT NAV WHILE ONE IS ALREADY ANIMATING
+
+        const [targetMonth, targetYear] = this.controller.dateManager.findTargetMonth(config.openCalendar, direction);
+        const transition = config.navigation.transition;
+
+        if (transition === 'none') {
+            this._finalizeSlide(config, targetMonth, targetYear, config.coreElements.monthBodyTrack);
+            return true;
+        }
+
+        if (transition === 'fade') {
+            this._fadeToMonth(config, targetMonth, targetYear);
+            return true;
+        }
+
+        this._animateSlideToMonth(config, direction, targetMonth, targetYear);
+        return true;
+    }
+
+    // 'slide' MODE - BUILDS A "PEEK" GRID FOR THE ADJACENT MONTH AS A TRACK SIBLING, THEN ANIMATES THE TRACK'S
+    // transform TO REVEAL IT.
+    _animateSlideToMonth(config, direction, targetMonth, targetYear) {
+        const ccn = this.controller.ccn;
+        const track = config.coreElements.monthBodyTrack;
+        this.pinMonthBodyViewportWidth(config);
+
+        // OPTIMISTICALLY SHOW THE TARGET MONTH/YEAR IN THE HEADER RIGHT AWAY, IN SYNC WITH THE PEEK GRID -
+        // OTHERWISE THE HEADER WOULD KEEP SHOWING THE OLD MONTH/YEAR FOR THE WHOLE DURATION OF THE SLIDE
+        const header = config.coreElements.calendarWrap.querySelector(`.${ccn}_month_header_title_wrap`);
+        if (header) {
+            header.innerHTML = this.buildMonthYearHtml(config, targetMonth, targetYear);
+        }
+
+        const peek = document.createElement('div');
+        peek.className = `${ccn}_month_body`;
+        peek.innerHTML = this.buildMonthBodyHtml(config, targetMonth, targetYear, false);
+
+        const goingNext = direction > 0;
+        if (goingNext) {
+            track.appendChild(peek);
+        } else {
+            track.insertBefore(peek, track.firstChild);
+        }
+
+        config.slide.active = true;
+        track.style.transition = 'none';
+        track.style.transform = goingNext ? 'translateX(0%)' : 'translateX(-100%)';
+        // FORCE A REFLOW SO THE transform WRITE BELOW ACTUALLY ANIMATES INSTEAD OF COALESCING WITH THE ONE ABOVE
+        void track.offsetHeight;
+
+        track.style.transition = `transform var(--calendar-slide-duration) var(--calendar-slide-easing)`;
+        track.style.transform = goingNext ? 'translateX(-100%)' : 'translateX(0%)';
+
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            this._finalizeSlide(config, targetMonth, targetYear, track);
+        };
+        track.addEventListener('transitionend', finish, { once: true });
+        setTimeout(finish, 600); // SAFETY NET IN CASE transitionend NEVER FIRES (E.G. ELEMENT HIDDEN MID-FLIGHT)
+    }
+
+    // 'fade' MODE - THE PEEK GRID OVERLAYS THE CURRENT ONE (position:absolute, A VIEWPORT CHILD, NOT A TRACK/
+    // FLEX SIBLING LIKE 'slide' USES) AND CROSSFADES IN VIA OPACITY. THE TRACK ITSELF IS NEVER TOUCHED UNTIL
+    // COMMIT, SO IT COMMITS THROUGH THE EXACT SAME _finalizeSlide 'slide' MODE USES.
+    _fadeToMonth(config, targetMonth, targetYear) {
+        const ccn = this.controller.ccn;
+        const viewport = config.coreElements.monthBodyViewport;
+        const track = config.coreElements.monthBodyTrack;
+
+        const header = config.coreElements.calendarWrap.querySelector(`.${ccn}_month_header_title_wrap`);
+        if (header) {
+            header.innerHTML = this.buildMonthYearHtml(config, targetMonth, targetYear);
+        }
+
+        const oldHeight = viewport.getBoundingClientRect().height;
+
+        const peek = document.createElement('div');
+        peek.className = `${ccn}_month_body ${ccn}_fade_peek`;
+        peek.innerHTML = this.buildMonthBodyHtml(config, targetMonth, targetYear, false);
+        viewport.appendChild(peek);
+
+        // THE PEEK IS position:absolute WITH NO bottom (SEE calendar.css) SO ITS HEIGHT IS INTRINSIC TO ITS OWN
+        // CONTENT INSTEAD OF STRETCHED TO MATCH THE OLD GRID - BUT THAT MEANS THE VIEWPORT (SIZED OFF THE OLD,
+        // STILL IN-FLOW GRID) WOULD CLIP A TALLER PEEK, OR LEAVE VISIBLE GAP UNDER A SHORTER ONE, WHICH READS AS A
+        // "DOWN AND UP" BOUNCE ONCE _finalizeSlide SWAPS IN THE REAL (CORRECTLY SIZED) GRID. PIN THE VIEWPORT TO
+        // THE TALLER OF THE TWO FOR THE DURATION OF THE FADE SO NEITHER GRID EVER MOVES; unpinMonthBodyViewportHeight
+        // LETS IT SPRING BACK TO AUTO ONCE THE REAL GRID IS IN PLACE.
+        const peekHeight = peek.getBoundingClientRect().height;
+        viewport.style.height = `${Math.max(oldHeight, peekHeight)}px`;
+
+        config.slide.active = true;
+        void peek.offsetHeight; // FORCE A REFLOW BEFORE ADDING THE "FADE IN" CLASS SO THE TRANSITION ANIMATES
+        peek.classList.add(`${ccn}_fade_in`);
+
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            this._finalizeSlide(config, targetMonth, targetYear, track);
+            this.unpinMonthBodyViewportHeight(config);
+            peek.remove();
+        };
+        peek.addEventListener('transitionend', finish, { once: true });
+        setTimeout(finish, 600); // SAFETY NET IN CASE transitionend NEVER FIRES
+    }
+
+    // DISCARDS BOTH GRIDS AND RENDERS THE TARGET MONTH FRESH VIA THE ORDINARY, SIDE-EFFECT-PRESERVING
+    // createMonthBody - THAT IS WHAT CORRECTLY RESTORES THE activeDate HIGHLIGHT, WHICH A RAW PEEK GRID
+    // BUILT VIA buildMonthBodyHtml ALONE NEVER SHOWS (SEE buildMonthBodyHtml's COMMENT)
+    _finalizeSlide(config, targetMonth, targetYear, track) {
+        config.openCalendar = new Date(targetYear, targetMonth);
+
+        track.style.transition = 'none';
+        track.innerHTML = '';
+        const fresh = document.createElement('div');
+        fresh.className = `${this.controller.ccn}_month_body`;
+        track.appendChild(fresh);
+        this.createMonthBody(config, fresh);
+        track.style.transform = 'translateX(0px)';
+
+        const header = config.coreElements.calendarWrap.querySelector(`.${this.controller.ccn}_month_header_title_wrap`);
+        if (header) {
+            header.innerHTML = this.returnMonthYear(config);
+        }
+        this.controller.configManager.arrowsCheckIfNeeded(config);
+        this.syncActiveYearChip(config);
+        this.rebuildMonthsPicker(config);
+
+        this.unpinMonthBodyViewportWidth(config);
+        config.slide.active = false;
+        config.slide.dragging = false;
+    }
+
+    // PIN THE VIEWPORT TO ITS CURRENT MEASURED PIXEL WIDTH FOR THE DURATION OF A SLIDE/DRAG. WITHOUT THIS, THE
+    // TRACK BRIEFLY HOLDING TWO .month_body GRIDS SIDE BY SIDE MAKES THE WHOLE CARD BALLOON TO ROUGHLY DOUBLE
+    // WIDTH UNTIL THE EXTRA GRID IS REMOVED - NOTHING IN THE outerWrap->innerCalendar->wrap->viewport CHAIN HAS
+    // AN EXPLICIT PIXEL WIDTH (BY DESIGN, SO IT ADAPTS TO CONTENT/THEME), SO THE SHRINK-TO-FIT COMPUTATION FOR
+    // THAT CHAIN SEES WHICHEVER CHILD IS WIDEST - NORMALLY ONE MONTH-GRID, BRIEFLY TWO DURING A SLIDE.
+    pinMonthBodyViewportWidth(config) {
+        const viewport = config.coreElements.monthBodyViewport;
+        viewport.style.width = `${viewport.getBoundingClientRect().width}px`;
+    }
+
+    unpinMonthBodyViewportWidth(config) {
+        config.coreElements.monthBodyViewport.style.width = '';
+    }
+
+    // SAME IDEA AS THE WIDTH PIN ABOVE, BUT FOR 'fade' MODE'S HEIGHT - SEE THE COMMENT IN _fadeToMonth.
+    unpinMonthBodyViewportHeight(config) {
+        config.coreElements.monthBodyViewport.style.height = '';
     }
 
     createHelperWrapper(wrap) {
@@ -885,22 +1989,35 @@ class DOMManager {
     }
 
     returnMonthYear(config) {
+        const monthIndex = config.openCalendar.getMonth();
+        const year = config.openCalendar.getFullYear();
+
+        config.year.handler.activeYear = year;
+        config.month.handler.activeMonth = monthIndex;
+
+        return this.buildMonthYearHtml(config, monthIndex, year);
+    }
+
+    // PURE HTML-STRING BUILDER FOR AN ARBITRARY month/year - NO SIDE EFFECTS (UNLIKE returnMonthYear, WHICH ALSO
+    // COMMITS config.year.handler.activeYear/config.month.handler.activeMonth). USED TO OPTIMISTICALLY PREVIEW
+    // THE TARGET MONTH/YEAR IN THE HEADER WHILE A SLIDE/DRAG IS IN FLIGHT, BEFORE IT'S ACTUALLY COMMITTED.
+    buildMonthYearHtml(config, month, year) {
         const ccn = this.controller.ccn;
         let clickableYear = '';
         if (config.clickable && config.year.clickable) {
             clickableYear = `${ccn}_clickable`;
         }
 
-        const monthIndex = config.openCalendar.getMonth();
-        const month = config.language.months[monthIndex];
-        const year = config.openCalendar.getFullYear();
+        let clickableMonth = '';
+        if (config.clickable && config.month.clickable) {
+            clickableMonth = `${ccn}_clickable`;
+        }
 
-        config.year.handler.activeYear = year;
-        config.month.handler.activeMonth = monthIndex;
+        const monthName = config.language.months[month];
 
         return `
-            <div class="${ccn}_month_header_title">
-                <span aria-label="${month} ${year}">${month}</span>
+            <div class="${ccn}_month_header_title ${clickableMonth}" id="calendar_${config.id}_month" aria-label="Month input">
+                <span aria-label="${monthName} ${year}">${monthName}</span>
             </div>
             <div class="${ccn}_year_header_title_wrap">
                 <span class="${ccn}_year_header_title ${clickableYear}" id="calendar_${config.id}_year" aria-label="Year input" data-min="${year - this.controller.downLimit}" data-max="${year + this.controller.upLimit}">${year}</span>
@@ -933,6 +2050,41 @@ class DOMManager {
     createMonthBody(config, parentEl, disabledMonth = false) {
         const month = config.openCalendar.getMonth(), year = config.openCalendar.getFullYear();
 
+        parentEl.innerHTML = this.buildMonthBodyHtml(config, month, year, disabledMonth);
+
+        // ADD ACTIVE TO CURRENT DATE IF CALENDAR IS OPENED TO THAT DATE (OTHERWISE ON RE RENDER THE ACTIVE DATE WILL NOT DISPLAY IT)
+        if (config.day.handler.activeDate) {
+            const activeYear = config.day.handler.activeDate.getFullYear();
+            const activeMonth = config.day.handler.activeDate.getMonth();
+            const activeDay = config.day.handler.activeDate.getDate();
+            const formattedActiveDate = this.controller.dateManager.formatDate(config, activeDay, activeMonth, activeYear);
+            const initDateElement = document.querySelector(`#${config.id} [data-date="${formattedActiveDate}"]`);
+            if (initDateElement) {
+                if (!initDateElement.classList.contains('outofbound')) {
+                    this.controller.eventHandler.onClickDayAction(initDateElement, config, false);
+                }
+                else {
+                    initDateElement.classList.add(`${this.controller.ccn}_active_day`);
+                }
+            }
+        }
+
+
+        // ONLY USE FOR THE INIT CONSTRUCTION
+        if (config.initDate) {
+            const day = config.openCalendar.getDate();
+            const formattedDate = this.controller.dateManager.formatDate(config, day, month, year);
+            const initDateElement = document.querySelector(`#${config.id} [data-date="${formattedDate}"]`)
+            this.controller.eventHandler.onClickDayAction(initDateElement, config, false);
+            config.initDate = false;
+        }
+    }
+
+    // PURE HTML-STRING BUILDER FOR AN ARBITRARY month/year (NOT NECESSARILY config.openCalendar'S CURRENT ONE) -
+    // USED BY createMonthBody FOR THE REAL CURRENT RENDER, AND BY slideToMonth/DRAG NAVIGATION TO BUILD A
+    // TEMPORARY "PEEK" GRID FOR AN ADJACENT MONTH. DELIBERATELY HAS NO SIDE EFFECTS (NO activeDate RESTORE,
+    // NO initDate HANDLING) SINCE A PEEK GRID MAY NEVER ACTUALLY GET COMMITTED.
+    buildMonthBodyHtml(config, month, year, disabledMonth = false) {
         const countDays = this.controller.dateManager.getNumOfDaysInMonth(month, year);
 
         const first_day = this.controller.dateManager.getFirstDayOfMonth(month, year);
@@ -961,7 +2113,7 @@ class DOMManager {
                 // CHECK IF SPECIFIC DATE IS DISABLED
                 const exists = this.controller.validatorHandle.validateDateConsideringProccessedLimits(currDay, config.processedLimits);
 
-                if (!exists) currentDayClass = `  ${ccn}_disabled_day`;
+                if (!exists) currentDayClass = ` ${ccn}_disabled_day`;
             }
 
             let data = '';
@@ -997,34 +2149,7 @@ class DOMManager {
         const next_month = new Date(year, month + 2, 0);
         htmlForMonthBody += this.startDaysOfMonthFromCorrectWeekDay(config, last_days, { next_month });
 
-        parentEl.innerHTML = htmlForMonthBody;
-
-        // ADD ACTIVE TO CURRENT DATE IF CALENDAR IS OPENED TO THAT DATE (OTHERWISE ON RE RENDER THE ACTIVE DATE WILL NOT DISPLAY IT)
-        if (config.day.handler.activeDate) {
-            const activeYear = config.day.handler.activeDate.getFullYear();
-            const activeMonth = config.day.handler.activeDate.getMonth();
-            const activeDay = config.day.handler.activeDate.getDate();
-            const formattedActiveDate = this.controller.dateManager.formatDate(config, activeDay, activeMonth, activeYear);
-            const initDateElement = document.querySelector(`#${config.id} [data-date="${formattedActiveDate}"]`);
-            if (initDateElement) {
-                if (!initDateElement.classList.contains('outofbound')) {
-                    this.controller.eventHandler.onClickDayAction(initDateElement, config, false);
-                }
-                else {
-                    initDateElement.classList.add(`${this.controller.ccn}_active_day`);
-                }
-            }
-        }
-
-
-        // ONLY USE FOR THE INIT CONSTRUCTION
-        if (config.initDate) {
-            const day = config.openCalendar.getDate();
-            const formattedDate = this.controller.dateManager.formatDate(config, day, month, year);
-            const initDateElement = document.querySelector(`#${config.id} [data-date="${formattedDate}"]`)
-            this.controller.eventHandler.onClickDayAction(initDateElement, config, false);
-            config.initDate = false;
-        }
+        return htmlForMonthBody;
     }
 
     createWrapHelper(config, parentEl) {
@@ -1041,6 +2166,36 @@ class DOMManager {
         buttonToToday.classList.add(`${this.controller.ccn}_today_button`);
         buttonToToday.innerText = config.language.todayButtonText;
         wrapButtonToToday.appendChild(buttonToToday);
+    }
+
+    // TIME TRIGGER ROW - OPENS THE TIME PANEL (SEE createTimeWrap/createTimeChoices). DELIBERATELY ITS OWN ROW
+    // APPENDED TO wrap (NOT INSIDE calendar_vfz_wrap_helper/createWrapHelper ABOVE) - THAT HELPER LAYER IS A
+    // z-index:-1, HOVER-ONLY-REVEAL CONTAINER BUILT SPECIFICALLY FOR THE "TODAY" BUTTON'S PEEK-UP ANIMATION,
+    // WHICH WOULD MAKE A PRIMARY, ALWAYS-NEEDED CONTROL LIKE THE TIME TRIGGER INVISIBLE BY DEFAULT (WORSE STILL
+    // ON TOUCH DEVICES WITH NO HOVER AT ALL). NEVER BUILT IN RANGE-SELECT MODE - SAME GATING AS THE PANEL ITSELF.
+    createTimeTriggerRow(config, wrap) {
+        if (!(config.clickable && config.time.enabled && !config.day.rangeSelect)) return null;
+
+        const ccn = this.controller.ccn;
+        const wrapTimeTrigger = document.createElement('div');
+        wrapTimeTrigger.className = `${ccn}_time_trigger_wrap`;
+        wrap.appendChild(wrapTimeTrigger);
+
+        const timeTrigger = document.createElement('span');
+        timeTrigger.className = `${ccn}_time_trigger`;
+        timeTrigger.textContent = this.controller.dateManager.formatTime(config, config.time.handler.activeHour, config.time.handler.activeMinute);
+        wrapTimeTrigger.appendChild(timeTrigger);
+
+        // NO POINT SHOWING A TIME TRIGGER BEFORE ANY DAY IS ACTIVE - THERE'S NOTHING TO ATTACH THE TIME TO YET
+        // (buildFullValueString's config.openCalendar FALLBACK IS FOR THE VALUE-COMPOSITION CASE, NOT FOR
+        // DECIDING WHAT'S SHOWN). config.day.handler.activeDate IS ALREADY SET HERE IF initDate:true, SINCE THAT
+        // RUNS INSIDE createMonthBody, WHICH THIS IS CALLED RIGHT AFTER. REVEALED BY
+        // EventHandler.onClickDayAction ONCE A DAY IS ACTUALLY CLICKED.
+        if (!config.day.handler.activeDate) {
+            this.closeElement(wrapTimeTrigger);
+        }
+
+        return wrapTimeTrigger;
     }
 
     startDaysOfMonthFromCorrectWeekDay(config, firstDayOfMonth, month_obj) {
@@ -1128,7 +2283,7 @@ class DOMManager {
 
             const fullDateAttr = this.controller.dateManager.formatFullDateAttrString(currDay);
 
-            html += `<span class="${this.controller.ccn}_day${custom_class} ${currentDayClass}${rangeClass} outofbound" data-day="${data_day}" data-date="${data_date}" data-full-date="${fullDateAttr}" ${use_or_not_fade}>${view_data_day}</span>`;
+            html += `<span class="${this.controller.ccn}_day${custom_class}${currentDayClass}${rangeClass} outofbound" data-day="${data_day}" data-date="${data_date}" data-full-date="${fullDateAttr}" ${use_or_not_fade}>${view_data_day}</span>`;
             c--;
         }
         return html;
@@ -1153,9 +2308,35 @@ class DOMManager {
 
         if (config.coreElements.followCursor) {
             config.coreElements.followCursor.style.transition = `
-                top ${config.style.transitions.cursorEffectDelay}ms, 
-                left ${config.style.transitions.cursorEffectDelay}ms, 
+                top ${config.style.transitions.cursorEffectDelay}ms,
+                left ${config.style.transitions.cursorEffectDelay}ms,
                 opacity 0.1s
+            `;
+        }
+
+        if (config.coreElements.monthsWrap) {
+            config.coreElements.monthsWrap.style.transition = `
+                opacity ${config.style.transitions.fadeMonthPicker}ms,
+                visibility ${config.style.transitions.fadeMonthPicker}ms,
+                transform ${config.style.transitions.fadeMonthPicker}ms
+            `;
+        }
+
+        if (config.coreElements.monthsFollowCursor) {
+            config.coreElements.monthsFollowCursor.style.transition = `
+                top ${config.style.transitions.cursorEffectDelay}ms,
+                left ${config.style.transitions.cursorEffectDelay}ms,
+                opacity 0.1s
+            `;
+        }
+
+        // REUSES fadeMonthPicker's TIMING RATHER THAN A DEDICATED OPTION - THE TIME PANEL IS THE SAME KIND OF
+        // OVERLAY POP AS THE MONTH/YEAR PANELS, NO NEED FOR A THIRD INDEPENDENTLY-NAMED DURATION
+        if (config.coreElements.timeWrap) {
+            config.coreElements.timeWrap.style.transition = `
+                opacity ${config.style.transitions.fadeMonthPicker}ms,
+                visibility ${config.style.transitions.fadeMonthPicker}ms,
+                transform ${config.style.transitions.fadeMonthPicker}ms
             `;
         }
     }
@@ -1350,6 +2531,21 @@ class DateManager {
 
     clickDayCoreFunctionality(clickedEl, config) {
         const element = config.inputToAttach;
+
+        // WHEN TIME IS ENABLED, config.day.handler.activeDate NEEDS TO EXIST BEFORE COMPOSING THE WRITTEN VALUE
+        // (buildFullValueString READS IT), SO configureActiveDay RUNS FIRST HERE - THE ORDER IS DELIBERATELY
+        // FLIPPED FROM THE PLAIN BRANCH BELOW, WHICH IS LEFT UNTOUCHED FOR EVERY CALENDAR NOT USING TIME
+        if (config.time.enabled) {
+            this.configureActiveDay(clickedEl, config);
+
+            const fullValue = this.buildFullValueString(config);
+            if (config.day.displayDateAfterClick) {
+                this.writeValueToAttachedElement(config, fullValue);
+            }
+            element.setAttribute('data-active-date', fullValue);
+            return;
+        }
+
         const dateValue = clickedEl.getAttribute('data-date');
 
         if (config.day.displayDateAfterClick) {
@@ -1358,6 +2554,41 @@ class DateManager {
         element.setAttribute('data-active-date', dateValue);
 
         this.configureActiveDay(clickedEl, config);
+    }
+
+    // "HH:mm" (24h) OR "hh:mm AM/PM" (12h) DEPENDING ON config.time.use12Hour - hour IS ALWAYS 0-23 REGARDLESS OF
+    // WHICH UI PRODUCED IT (THE 12-HOUR PICKER IS A DISPLAY/INTERACTION CONVENIENCE ONLY, SEE EventHandler)
+    formatTime(config, hour, minute) {
+        const mm = String(minute).padStart(2, '0');
+
+        if (config.time.use12Hour) {
+            const period = hour >= 12 ? 'PM' : 'AM';
+            let hour12 = hour % 12;
+            if (hour12 === 0) hour12 = 12;
+            return `${String(hour12).padStart(2, '0')}:${mm} ${period}`;
+        }
+
+        return `${String(hour).padStart(2, '0')}:${mm}`;
+    }
+
+    // THE SINGLE PLACE DATE AND TIME EVER GET COMBINED INTO ONE DISPLAY STRING - FALLS BACK TO config.openCalendar
+    // WHEN NO DAY HAS BEEN CLICKED YET (E.G. THE TIME PANEL WAS OPENED BEFORE ANY DAY CLICK) SO PICKING A TIME
+    // ALWAYS PRODUCES A VISIBLE VALUE
+    buildFullValueString(config) {
+        const date = config.day.handler.activeDate || config.openCalendar;
+        const dateStr = this.formatDate(config, date.getDate(), date.getMonth(), date.getFullYear());
+
+        if (!config.time.enabled) return dateStr;
+
+        const timeStr = this.formatTime(config, config.time.handler.activeHour, config.time.handler.activeMinute);
+        return `${dateStr} ${timeStr}`;
+    }
+
+    // SAME "WHICH DATE REPRESENTS THE CURRENT SELECTION" FALLBACK AS buildFullValueString - RESOLVES IT TO A
+    // WEEKDAY (Date.getDay()) TO LOOK UP THAT WEEKDAY'S HOUR BOUNDS FROM config.time.processedLimits.weekdayLimits
+    getActiveWeekdayHourLimits(config) {
+        const date = config.day.handler.activeDate || config.openCalendar;
+        return config.time.processedLimits.weekdayLimits[date.getDay()].hourLimits;
     }
 
     // RETURNS [startDateStr, endDateStr, rangeInfo] - rangeInfo CARRIES RAW Date OBJECTS + INCLUSIVE DAY COUNT
@@ -1575,6 +2806,23 @@ class ConfigManager {
         return [processedLimits, openCalendar];
     }
 
+    // RESOLVES time.hourLimits/minuteLimits/limits[weekday] INTO A FLAT PER-WEEKDAY LOOKUP, ONCE AT CONFIG-BUILD
+    // TIME (MIRRORING processConfigLimits ABOVE) - NOT A THIRD NESTING LEVEL LIKE year's globalLimits/limits[year]
+    // CASCADE, JUST A SIMPLE GLOBAL FALLBACK + PER-WEEKDAY HOUR OVERRIDE. KEYED BY Date.getDay() (0=Sunday..
+    // 6=Saturday), THE SAME CONVENTION weekStartDay ALREADY USES.
+    processTimeLimits(time) {
+        const hourLimits = this.controller.validatorHandle.validateHourRange(time?.hourLimits) || [0, 23];
+        const minuteLimits = this.controller.validatorHandle.validateMinuteRange(time?.minuteLimits) || [0, 59];
+
+        const weekdayLimits = {};
+        for (let weekday = 0; weekday <= 6; weekday++) {
+            const overrideHourLimits = this.controller.validatorHandle.validateHourRange(time?.limits?.[weekday]?.hourLimits);
+            weekdayLimits[weekday] = { hourLimits: overrideHourLimits || hourLimits };
+        }
+
+        return { hourLimits, minuteLimits, weekdayLimits };
+    }
+
     modifyOpenCalendarIfNeedItAfterLimits(processedLimits, openCalendar) {
         let currentYear = openCalendar.getFullYear();
         let currentMonth = openCalendar.getMonth();
@@ -1652,6 +2900,13 @@ class ConfigManager {
 
     // FUNCTION TO UPDATE ARROW VISIBILITY
     arrowsCheckIfNeeded(config) {
+        const { prevAvailable, nextAvailable } = this.computeNavAvailability(config);
+        this.controller.domManager.updateNavArrowsVisibility(config, prevAvailable, nextAvailable);
+    }
+
+    // PURE EXTRACTION FROM THE OLD arrowsCheckIfNeeded BODY (NO BEHAVIOR CHANGE) - REUSED BY THE DRAG-TO-NAVIGATE
+    // GESTURE IN EventHandler SO IT CAN'T BE DRAGGED TOWARD A DIRECTION THE ARROWS WOULDN'T ALLOW EITHER
+    computeNavAvailability(config) {
         const currentDate = config.openCalendar;  // GET THE CURRENT DATE FROM CONFIG
         let currentMonth = currentDate.getMonth();
         let currentYear = currentDate.getFullYear();
@@ -1691,7 +2946,7 @@ class ConfigManager {
             nextAvailable = nextMonth >= minMonth && nextMonth <= maxMonth;
         }
 
-        this.controller.domManager.updateNavArrowsVisibility(config, prevAvailable, nextAvailable);
+        return { prevAvailable, nextAvailable };
     }
 }
 class ValidatorHandle {
@@ -1800,6 +3055,30 @@ class ValidatorHandle {
         return [min, max];
     }
 
+    validateHourRange(hours) {
+        if (!hours) return null;
+        let min = hours[0];
+        let max = hours[1];
+        if ((!min && min !== 0) || (!max && max !== 0)) return null;
+        [min, max] = this.decideMinMaxValues(min, max);
+
+        if (max > 23 || min < 0) return null;
+
+        return [min, max];
+    }
+
+    validateMinuteRange(minutes) {
+        if (!minutes) return null;
+        let min = minutes[0];
+        let max = minutes[1];
+        if ((!min && min !== 0) || (!max && max !== 0)) return null;
+        [min, max] = this.decideMinMaxValues(min, max);
+
+        if (max > 59 || min < 0) return null;
+
+        return [min, max];
+    }
+
     decideMinMaxValues(min, max) {
         // XOR METHOD
         if (min > max) {
@@ -1865,10 +3144,6 @@ class Calendar_Controller {
         this.downLimit = 100;
         this.upLimit = 100;
 
-        // IMPORTANT TO REMOVE MOUSE EVENT LISTENER IF THERE IS NO CURSOR
-        this.mouseMoveEventsDelegation = '';
-        this.mousemoveListenerAdded = false;
-
         // HERE ADD THE CONFIGURATIONS OF EACH INPUT ACTION
         this.savedData = [];
         this.configurations = [];
@@ -1931,7 +3206,9 @@ class Calendar_Controller {
         year = null,
         month = null,
         day = null,
-        disable = null
+        time = null,
+        disable = null,
+        layout = 'classic'
     }) {
         const givenInput = this.validatorHandle.validateString(inputToAttach);
 
@@ -1964,6 +3241,16 @@ class Calendar_Controller {
 
             [processedLimits, openCalendar] = this.configManager.processConfigLimits({ openCalendar, year, month, day });
 
+            const minuteStep = this.validatorHandle.validateInteger(time?.minuteStep, 1);
+            const timeProcessedLimits = this.configManager.processTimeLimits(time);
+
+            // CLAMP THE INITIAL activeHour/activeMinute AGAINST openCalendar'S OWN WEEKDAY - MIRRORS HOW
+            // processConfigLimits ALREADY CLAMPS openCalendar ITSELF AGAINST YEAR/MONTH/DAY LIMITS, SO THE VERY
+            // FIRST RENDER RESPECTS time.limits WITHOUT NEEDING A DAY CLICK TO TRIGGER THE CLAMP
+            const initialWeekdayHourLimits = timeProcessedLimits.weekdayLimits[openCalendar.getDay()].hourLimits;
+            const initialActiveHour = Math.max(initialWeekdayHourLimits[0], Math.min(initialWeekdayHourLimits[1], openCalendar.getHours()));
+            const initialActiveMinute = Math.max(timeProcessedLimits.minuteLimits[0], Math.min(timeProcessedLimits.minuteLimits[1], Math.floor(openCalendar.getMinutes() / minuteStep) * minuteStep));
+
             // VALIDATE OPTIONS (IF NOT, INIATE DEFAULT VALUES)
             const config = {
                 id: this.configManager.generateUniqueIds(25),
@@ -1972,6 +3259,9 @@ class Calendar_Controller {
                 initDate: this.validatorHandle.validateBoolean(initDate, false),
                 dateFormat: this.validatorHandle.validateDateFormat(dateFormat.toUpperCase(), 'DD-MM-YYYY'),
                 clickable: this.validatorHandle.validateBoolean(clickable, true),
+                // CSS-ONLY LAYOUT PRESET - SAME DOM/JS FOR EVERY VALUE, JUST A CLASS ON THE OUTER WRAP (SEE
+                // DOMManager.createOuterWrap) THAT calendar.css USES TO REPOSITION THE NAV ARROWS
+                layout: ['classic', 'sideArrows'].includes(layout) ? layout : 'classic',
                 // HIDDEN VALUE (NOT FROM CONFIG) - SET VIA disableCalendar()/enableCalendar()
                 disabled: false,
                 disable: {
@@ -2000,6 +3290,18 @@ class Calendar_Controller {
                 navigation: {
                     activeArrows: this.validatorHandle.validateBoolean(navigation?.activeArrows, true),
                     respectMonthLimits: this.validatorHandle.validateBoolean(navigation?.respectMonthLimits, false),
+                    // WHETHER THE DAY-GRID CAN BE DRAGGED/SWIPED TO NAVIGATE MONTHS - INDEPENDENT OF activeArrows
+                    // (E.G. A MOBILE-FIRST CALENDAR MIGHT HIDE THE ARROWS AND RELY ON SWIPE ALONE)
+                    dragToNavigate: this.validatorHandle.validateBoolean(navigation?.dragToNavigate, true),
+                    // HOW ARROW-CLICK/YEAR-SELECT NAVIGATION VISUALLY TRANSITIONS BETWEEN MONTHS. DRAG-TO-NAVIGATE
+                    // ALWAYS USES ITS OWN LIVE-FOLLOW MOTION REGARDLESS OF THIS SETTING - THAT'S INHERENT TO THE
+                    // GESTURE ITSELF, NOT SOMETHING THIS OPTION CONTROLS.
+                    transition: ['slide', 'none', 'fade'].includes(navigation?.transition) ? navigation.transition : 'slide',
+                },
+                // HIDDEN VALUES (NOT FROM CONFIG) - TRACKS AN IN-FLIGHT MONTH SLIDE/DRAG (SEE DOMManager.slideToMonth)
+                slide: {
+                    active: false,
+                    dragging: false,
                 },
                 cursorEffect: this.validatorHandle.validateBoolean(cursorEffect, true),
                 style: {
@@ -2007,7 +3309,14 @@ class Calendar_Controller {
                     transitions: {
                         fadeDatePicker: this.validatorHandle.validateInteger(style?.transitions?.fadeDatePicker, 0),
                         fadeYearPicker: this.validatorHandle.validateInteger(style?.transitions?.fadeYearPicker, 0),
+                        fadeMonthPicker: this.validatorHandle.validateInteger(style?.transitions?.fadeMonthPicker, 0),
                         cursorEffectDelay: this.validatorHandle.validateInteger(style?.transitions?.cursorEffectDelay, 0),
+                        // HOW LONG (MS) navigation.transition's 'slide'/'fade' MODES TAKE - SHARED BY BOTH SINCE
+                        // THEY BOTH DRIVE THE SAME --calendar-slide-duration CSS VARIABLE (SEE
+                        // DOMManager.createOuterWrap, WHICH WRITES THIS AS AN INLINE OVERRIDE SCOPED TO THIS
+                        // CALENDAR'S OWN OUTER WRAP). HAS NO EFFECT ON 'none' OR ON DRAG, WHICH ALWAYS
+                        // LIVE-FOLLOWS REGARDLESS OF ANY TRANSITION SETTING.
+                        monthNavigation: this.validatorHandle.validateInteger(style?.transitions?.monthNavigation, 320),
                     }
                 },
                 year: {
@@ -2043,6 +3352,34 @@ class Calendar_Controller {
                         rangeStart: null,
                         rangeEnd: null,
                         rangeState: 'idle',
+                    },
+                },
+                time: {
+                    // TURNS ON THE WHOLE FEATURE - THE TIME TRIGGER/PANEL AND VALUE COMPOSITION (SEE
+                    // DateManager.buildFullValueString). NEVER BUILT WHEN day.rangeSelect IS ON - TIME IS
+                    // A SINGLE-DATE CONCEPT, THERE'S NO PER-ENDPOINT TIME IN RANGE MODE.
+                    enabled: this.validatorHandle.validateBoolean(time?.enabled, false),
+                    use12Hour: this.validatorHandle.validateBoolean(time?.use12Hour, false),
+                    minuteStep,
+                    // FIRES ON ANY HOUR/MINUTE/PERIOD CHANGE - onSelectHour/onSelectMinute BELOW ARE THE MORE
+                    // GRANULAR VERSIONS THAT FIRE ONLY FOR THEIR OWN WHEEL; onClickTime FIRES SEPARATELY WHEN
+                    // THE TRIGGER ITSELF IS CLICKED (WHICH ALSO APPLIES THE CURRENT VALUE EVEN IF NEITHER WHEEL
+                    // WAS EVER TOUCHED - SEE EventHandler.handlerClickTimeToNav)
+                    onTimeChange: this.validatorHandle.validateFunction(time?.onTimeChange),
+                    onClickTime: this.validatorHandle.validateFunction(time?.onClickTime),
+                    onSelectHour: this.validatorHandle.validateFunction(time?.onSelectHour),
+                    onSelectMinute: this.validatorHandle.validateFunction(time?.onSelectMinute),
+                    // RESOLVED ONCE HERE (NOT A THIRD year-STYLE NESTING LEVEL) - GLOBAL hourLimits/minuteLimits
+                    // PLUS AN OPTIONAL PER-WEEKDAY hourLimits OVERRIDE, KEYED BY Date.getDay() (SEE
+                    // ConfigManager.processTimeLimits)
+                    processedLimits: timeProcessedLimits,
+                    // HIDDEN VALUES (NOT FROM CONFIG) - ALWAYS INITIALIZED FROM openCalendar, MIRRORING
+                    // year.handler.activeYear/month.handler.activeMonth. activeMinute IS FLOOR-SNAPPED TO
+                    // THE NEAREST VALID STEP, MATCHING THE EXISTING rangeMinDays/rangeStepDays FLOOR-SNAP
+                    // CONVENTION (NOT ROUND-TO-NEAREST), THEN BOTH ARE CLAMPED AGAINST time.limits (SEE ABOVE).
+                    handler: {
+                        activeHour: initialActiveHour,
+                        activeMinute: initialActiveMinute,
                     },
                 },
             }

@@ -17,15 +17,17 @@ const dateId1 = calendarController.renderCalendar({
     // displayNextMonth: true,
     navigation: {
         activeArrows: true,
-        respectMonthLimits: true
+        respectMonthLimits: true,
+        transition: 'fade'
     },
-    // cursorEffect: true,
+    cursorEffect: true,
     style: {
         includeFadedDays: true,
         transitions: {
             fadeDatePicker: 300,
             fadeYearPicker: 400,
-            cursorEffectDelay: 100
+            cursorEffectDelay: 100,
+            monthNavigation: 600
         }
     },
     year: {
@@ -85,11 +87,21 @@ const dateId2 = calendarController.renderCalendar({
     clickable: true,
     openCalendar: new Date('2023-8-12'),
     initDate: false,
+    layout: 'sideArrows',
+    // MANUAL TEST FIXTURE: month.clickable:false SHOULD MEAN NO MONTH PICKER PANEL IS BUILT AT ALL AND THE
+    // MONTH NAME IN THE HEADER ISN'T CLICKABLE - THE YEAR PICKER SHOULD STILL WORK NORMALLY ON THIS CALENDAR
+    month: {
+        clickable: true,
+    },
     year: {
         yearLimits: [0, 2025],
     },
     day: {
         // clickable: true
+    },
+    time: {
+        enabled: true,
+        use12Hour: true,
     },
     style: {
         transitions: {
@@ -117,11 +129,42 @@ const dateId3 = calendarController.renderCalendar({
     clickable: true,
     openCalendar: new Date('2025-5-5'),
     initDate: false,
+    navigation: {
+        transition: 'none'
+    },
     year: {
         yearLimits: [0, 2025],
     },
     day: {
         // clickable: true
+    },
+    time: {
+        enabled: true,
+        minuteStep: 15,
+        // MANUAL TEST FIXTURE FOR TIME LIMITS: "BUSINESS HOURS" 9-17 ON WEEKDAYS, SHORTER SATURDAY HOURS,
+        // SUNDAY (0, NOT LISTED) INHERITS THE GLOBAL hourLimits BELOW. minuteLimits IS GLOBAL/UNIFORM.
+        hourLimits: [8, 20],
+        minuteLimits: [0, 45],
+        limits: {
+            1: { hourLimits: [9, 17] },
+            2: { hourLimits: [9, 17] },
+            3: { hourLimits: [9, 17] },
+            4: { hourLimits: [9, 17] },
+            5: { hourLimits: [9, 17] },
+            6: { hourLimits: [10, 14] },
+        },
+        onTimeChange: (valueStr, hour, minute) => {
+            console.log('Time changed:', valueStr, hour, minute);
+        },
+        onClickTime: (isOpen, valueStr) => {
+            console.log(isOpen ? 'Time trigger opened' : 'Time trigger closed', 'current value:', valueStr);
+        },
+        onSelectHour: (hour, valueStr) => {
+            console.log('Hour selected:', hour, valueStr);
+        },
+        onSelectMinute: (minute, valueStr) => {
+            console.log('Minute selected:', minute, valueStr);
+        },
     },
     style: {
         transitions: {
@@ -147,6 +190,10 @@ const dateId4 = calendarController.renderCalendar({
     clickable: true,
     openCalendar: new Date(),
     initDate: false,
+    displayPreviousMonth: true,
+    style: {
+        includeFadedDays: true,
+    },
     year: {
         yearLimits: [2024, 2027],
         limits: {

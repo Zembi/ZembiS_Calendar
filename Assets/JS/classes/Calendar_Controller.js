@@ -12,10 +12,6 @@ class Calendar_Controller {
         this.downLimit = 100;
         this.upLimit = 100;
 
-        // IMPORTANT TO REMOVE MOUSE EVENT LISTENER IF THERE IS NO CURSOR
-        this.mouseMoveEventsDelegation = '';
-        this.mousemoveListenerAdded = false;
-
         // HERE ADD THE CONFIGURATIONS OF EACH INPUT ACTION
         this.savedData = [];
         this.configurations = [];
@@ -78,7 +74,9 @@ class Calendar_Controller {
         year = null,
         month = null,
         day = null,
-        disable = null
+        time = null,
+        disable = null,
+        layout = 'classic'
     }) {
         const givenInput = this.validatorHandle.validateString(inputToAttach);
 
@@ -111,6 +109,16 @@ class Calendar_Controller {
 
             [processedLimits, openCalendar] = this.configManager.processConfigLimits({ openCalendar, year, month, day });
 
+            const minuteStep = this.validatorHandle.validateInteger(time?.minuteStep, 1);
+            const timeProcessedLimits = this.configManager.processTimeLimits(time);
+
+            // CLAMP THE INITIAL activeHour/activeMinute AGAINST openCalendar'S OWN WEEKDAY - MIRRORS HOW
+            // processConfigLimits ALREADY CLAMPS openCalendar ITSELF AGAINST YEAR/MONTH/DAY LIMITS, SO THE VERY
+            // FIRST RENDER RESPECTS time.limits WITHOUT NEEDING A DAY CLICK TO TRIGGER THE CLAMP
+            const initialWeekdayHourLimits = timeProcessedLimits.weekdayLimits[openCalendar.getDay()].hourLimits;
+            const initialActiveHour = Math.max(initialWeekdayHourLimits[0], Math.min(initialWeekdayHourLimits[1], openCalendar.getHours()));
+            const initialActiveMinute = Math.max(timeProcessedLimits.minuteLimits[0], Math.min(timeProcessedLimits.minuteLimits[1], Math.floor(openCalendar.getMinutes() / minuteStep) * minuteStep));
+
             // VALIDATE OPTIONS (IF NOT, INIATE DEFAULT VALUES)
             const config = {
                 id: this.configManager.generateUniqueIds(25),
@@ -119,6 +127,9 @@ class Calendar_Controller {
                 initDate: this.validatorHandle.validateBoolean(initDate, false),
                 dateFormat: this.validatorHandle.validateDateFormat(dateFormat.toUpperCase(), 'DD-MM-YYYY'),
                 clickable: this.validatorHandle.validateBoolean(clickable, true),
+                // CSS-ONLY LAYOUT PRESET - SAME DOM/JS FOR EVERY VALUE, JUST A CLASS ON THE OUTER WRAP (SEE
+                // DOMManager.createOuterWrap) THAT calendar.css USES TO REPOSITION THE NAV ARROWS
+                layout: ['classic', 'sideArrows'].includes(layout) ? layout : 'classic',
                 // HIDDEN VALUE (NOT FROM CONFIG) - SET VIA disableCalendar()/enableCalendar()
                 disabled: false,
                 disable: {
@@ -147,6 +158,18 @@ class Calendar_Controller {
                 navigation: {
                     activeArrows: this.validatorHandle.validateBoolean(navigation?.activeArrows, true),
                     respectMonthLimits: this.validatorHandle.validateBoolean(navigation?.respectMonthLimits, false),
+                    // WHETHER THE DAY-GRID CAN BE DRAGGED/SWIPED TO NAVIGATE MONTHS - INDEPENDENT OF activeArrows
+                    // (E.G. A MOBILE-FIRST CALENDAR MIGHT HIDE THE ARROWS AND RELY ON SWIPE ALONE)
+                    dragToNavigate: this.validatorHandle.validateBoolean(navigation?.dragToNavigate, true),
+                    // HOW ARROW-CLICK/YEAR-SELECT NAVIGATION VISUALLY TRANSITIONS BETWEEN MONTHS. DRAG-TO-NAVIGATE
+                    // ALWAYS USES ITS OWN LIVE-FOLLOW MOTION REGARDLESS OF THIS SETTING - THAT'S INHERENT TO THE
+                    // GESTURE ITSELF, NOT SOMETHING THIS OPTION CONTROLS.
+                    transition: ['slide', 'none', 'fade'].includes(navigation?.transition) ? navigation.transition : 'slide',
+                },
+                // HIDDEN VALUES (NOT FROM CONFIG) - TRACKS AN IN-FLIGHT MONTH SLIDE/DRAG (SEE DOMManager.slideToMonth)
+                slide: {
+                    active: false,
+                    dragging: false,
                 },
                 cursorEffect: this.validatorHandle.validateBoolean(cursorEffect, true),
                 style: {
@@ -154,7 +177,14 @@ class Calendar_Controller {
                     transitions: {
                         fadeDatePicker: this.validatorHandle.validateInteger(style?.transitions?.fadeDatePicker, 0),
                         fadeYearPicker: this.validatorHandle.validateInteger(style?.transitions?.fadeYearPicker, 0),
+                        fadeMonthPicker: this.validatorHandle.validateInteger(style?.transitions?.fadeMonthPicker, 0),
                         cursorEffectDelay: this.validatorHandle.validateInteger(style?.transitions?.cursorEffectDelay, 0),
+                        // HOW LONG (MS) navigation.transition's 'slide'/'fade' MODES TAKE - SHARED BY BOTH SINCE
+                        // THEY BOTH DRIVE THE SAME --calendar-slide-duration CSS VARIABLE (SEE
+                        // DOMManager.createOuterWrap, WHICH WRITES THIS AS AN INLINE OVERRIDE SCOPED TO THIS
+                        // CALENDAR'S OWN OUTER WRAP). HAS NO EFFECT ON 'none' OR ON DRAG, WHICH ALWAYS
+                        // LIVE-FOLLOWS REGARDLESS OF ANY TRANSITION SETTING.
+                        monthNavigation: this.validatorHandle.validateInteger(style?.transitions?.monthNavigation, 320),
                     }
                 },
                 year: {
@@ -190,6 +220,34 @@ class Calendar_Controller {
                         rangeStart: null,
                         rangeEnd: null,
                         rangeState: 'idle',
+                    },
+                },
+                time: {
+                    // TURNS ON THE WHOLE FEATURE - THE TIME TRIGGER/PANEL AND VALUE COMPOSITION (SEE
+                    // DateManager.buildFullValueString). NEVER BUILT WHEN day.rangeSelect IS ON - TIME IS
+                    // A SINGLE-DATE CONCEPT, THERE'S NO PER-ENDPOINT TIME IN RANGE MODE.
+                    enabled: this.validatorHandle.validateBoolean(time?.enabled, false),
+                    use12Hour: this.validatorHandle.validateBoolean(time?.use12Hour, false),
+                    minuteStep,
+                    // FIRES ON ANY HOUR/MINUTE/PERIOD CHANGE - onSelectHour/onSelectMinute BELOW ARE THE MORE
+                    // GRANULAR VERSIONS THAT FIRE ONLY FOR THEIR OWN WHEEL; onClickTime FIRES SEPARATELY WHEN
+                    // THE TRIGGER ITSELF IS CLICKED (WHICH ALSO APPLIES THE CURRENT VALUE EVEN IF NEITHER WHEEL
+                    // WAS EVER TOUCHED - SEE EventHandler.handlerClickTimeToNav)
+                    onTimeChange: this.validatorHandle.validateFunction(time?.onTimeChange),
+                    onClickTime: this.validatorHandle.validateFunction(time?.onClickTime),
+                    onSelectHour: this.validatorHandle.validateFunction(time?.onSelectHour),
+                    onSelectMinute: this.validatorHandle.validateFunction(time?.onSelectMinute),
+                    // RESOLVED ONCE HERE (NOT A THIRD year-STYLE NESTING LEVEL) - GLOBAL hourLimits/minuteLimits
+                    // PLUS AN OPTIONAL PER-WEEKDAY hourLimits OVERRIDE, KEYED BY Date.getDay() (SEE
+                    // ConfigManager.processTimeLimits)
+                    processedLimits: timeProcessedLimits,
+                    // HIDDEN VALUES (NOT FROM CONFIG) - ALWAYS INITIALIZED FROM openCalendar, MIRRORING
+                    // year.handler.activeYear/month.handler.activeMonth. activeMinute IS FLOOR-SNAPPED TO
+                    // THE NEAREST VALID STEP, MATCHING THE EXISTING rangeMinDays/rangeStepDays FLOOR-SNAP
+                    // CONVENTION (NOT ROUND-TO-NEAREST), THEN BOTH ARE CLAMPED AGAINST time.limits (SEE ABOVE).
+                    handler: {
+                        activeHour: initialActiveHour,
+                        activeMinute: initialActiveMinute,
                     },
                 },
             }

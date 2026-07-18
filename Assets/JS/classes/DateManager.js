@@ -163,6 +163,21 @@ class DateManager {
 
     clickDayCoreFunctionality(clickedEl, config) {
         const element = config.inputToAttach;
+
+        // WHEN TIME IS ENABLED, config.day.handler.activeDate NEEDS TO EXIST BEFORE COMPOSING THE WRITTEN VALUE
+        // (buildFullValueString READS IT), SO configureActiveDay RUNS FIRST HERE - THE ORDER IS DELIBERATELY
+        // FLIPPED FROM THE PLAIN BRANCH BELOW, WHICH IS LEFT UNTOUCHED FOR EVERY CALENDAR NOT USING TIME
+        if (config.time.enabled) {
+            this.configureActiveDay(clickedEl, config);
+
+            const fullValue = this.buildFullValueString(config);
+            if (config.day.displayDateAfterClick) {
+                this.writeValueToAttachedElement(config, fullValue);
+            }
+            element.setAttribute('data-active-date', fullValue);
+            return;
+        }
+
         const dateValue = clickedEl.getAttribute('data-date');
 
         if (config.day.displayDateAfterClick) {
@@ -171,6 +186,41 @@ class DateManager {
         element.setAttribute('data-active-date', dateValue);
 
         this.configureActiveDay(clickedEl, config);
+    }
+
+    // "HH:mm" (24h) OR "hh:mm AM/PM" (12h) DEPENDING ON config.time.use12Hour - hour IS ALWAYS 0-23 REGARDLESS OF
+    // WHICH UI PRODUCED IT (THE 12-HOUR PICKER IS A DISPLAY/INTERACTION CONVENIENCE ONLY, SEE EventHandler)
+    formatTime(config, hour, minute) {
+        const mm = String(minute).padStart(2, '0');
+
+        if (config.time.use12Hour) {
+            const period = hour >= 12 ? 'PM' : 'AM';
+            let hour12 = hour % 12;
+            if (hour12 === 0) hour12 = 12;
+            return `${String(hour12).padStart(2, '0')}:${mm} ${period}`;
+        }
+
+        return `${String(hour).padStart(2, '0')}:${mm}`;
+    }
+
+    // THE SINGLE PLACE DATE AND TIME EVER GET COMBINED INTO ONE DISPLAY STRING - FALLS BACK TO config.openCalendar
+    // WHEN NO DAY HAS BEEN CLICKED YET (E.G. THE TIME PANEL WAS OPENED BEFORE ANY DAY CLICK) SO PICKING A TIME
+    // ALWAYS PRODUCES A VISIBLE VALUE
+    buildFullValueString(config) {
+        const date = config.day.handler.activeDate || config.openCalendar;
+        const dateStr = this.formatDate(config, date.getDate(), date.getMonth(), date.getFullYear());
+
+        if (!config.time.enabled) return dateStr;
+
+        const timeStr = this.formatTime(config, config.time.handler.activeHour, config.time.handler.activeMinute);
+        return `${dateStr} ${timeStr}`;
+    }
+
+    // SAME "WHICH DATE REPRESENTS THE CURRENT SELECTION" FALLBACK AS buildFullValueString - RESOLVES IT TO A
+    // WEEKDAY (Date.getDay()) TO LOOK UP THAT WEEKDAY'S HOUR BOUNDS FROM config.time.processedLimits.weekdayLimits
+    getActiveWeekdayHourLimits(config) {
+        const date = config.day.handler.activeDate || config.openCalendar;
+        return config.time.processedLimits.weekdayLimits[date.getDay()].hourLimits;
     }
 
     // RETURNS [startDateStr, endDateStr, rangeInfo] - rangeInfo CARRIES RAW Date OBJECTS + INCLUSIVE DAY COUNT

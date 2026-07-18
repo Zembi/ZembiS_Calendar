@@ -107,6 +107,23 @@ class ConfigManager {
         return [processedLimits, openCalendar];
     }
 
+    // RESOLVES time.hourLimits/minuteLimits/limits[weekday] INTO A FLAT PER-WEEKDAY LOOKUP, ONCE AT CONFIG-BUILD
+    // TIME (MIRRORING processConfigLimits ABOVE) - NOT A THIRD NESTING LEVEL LIKE year's globalLimits/limits[year]
+    // CASCADE, JUST A SIMPLE GLOBAL FALLBACK + PER-WEEKDAY HOUR OVERRIDE. KEYED BY Date.getDay() (0=Sunday..
+    // 6=Saturday), THE SAME CONVENTION weekStartDay ALREADY USES.
+    processTimeLimits(time) {
+        const hourLimits = this.controller.validatorHandle.validateHourRange(time?.hourLimits) || [0, 23];
+        const minuteLimits = this.controller.validatorHandle.validateMinuteRange(time?.minuteLimits) || [0, 59];
+
+        const weekdayLimits = {};
+        for (let weekday = 0; weekday <= 6; weekday++) {
+            const overrideHourLimits = this.controller.validatorHandle.validateHourRange(time?.limits?.[weekday]?.hourLimits);
+            weekdayLimits[weekday] = { hourLimits: overrideHourLimits || hourLimits };
+        }
+
+        return { hourLimits, minuteLimits, weekdayLimits };
+    }
+
     modifyOpenCalendarIfNeedItAfterLimits(processedLimits, openCalendar) {
         let currentYear = openCalendar.getFullYear();
         let currentMonth = openCalendar.getMonth();
@@ -184,6 +201,13 @@ class ConfigManager {
 
     // FUNCTION TO UPDATE ARROW VISIBILITY
     arrowsCheckIfNeeded(config) {
+        const { prevAvailable, nextAvailable } = this.computeNavAvailability(config);
+        this.controller.domManager.updateNavArrowsVisibility(config, prevAvailable, nextAvailable);
+    }
+
+    // PURE EXTRACTION FROM THE OLD arrowsCheckIfNeeded BODY (NO BEHAVIOR CHANGE) - REUSED BY THE DRAG-TO-NAVIGATE
+    // GESTURE IN EventHandler SO IT CAN'T BE DRAGGED TOWARD A DIRECTION THE ARROWS WOULDN'T ALLOW EITHER
+    computeNavAvailability(config) {
         const currentDate = config.openCalendar;  // GET THE CURRENT DATE FROM CONFIG
         let currentMonth = currentDate.getMonth();
         let currentYear = currentDate.getFullYear();
@@ -223,6 +247,6 @@ class ConfigManager {
             nextAvailable = nextMonth >= minMonth && nextMonth <= maxMonth;
         }
 
-        this.controller.domManager.updateNavArrowsVisibility(config, prevAvailable, nextAvailable);
+        return { prevAvailable, nextAvailable };
     }
 }

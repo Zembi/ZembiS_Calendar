@@ -104,6 +104,30 @@ class ValidatorHandle {
         return [min, max];
     }
 
+    validateHourRange(hours) {
+        if (!hours) return null;
+        let min = hours[0];
+        let max = hours[1];
+        if ((!min && min !== 0) || (!max && max !== 0)) return null;
+        [min, max] = this.decideMinMaxValues(min, max);
+
+        if (max > 23 || min < 0) return null;
+
+        return [min, max];
+    }
+
+    validateMinuteRange(minutes) {
+        if (!minutes) return null;
+        let min = minutes[0];
+        let max = minutes[1];
+        if ((!min && min !== 0) || (!max && max !== 0)) return null;
+        [min, max] = this.decideMinMaxValues(min, max);
+
+        if (max > 59 || min < 0) return null;
+
+        return [min, max];
+    }
+
     decideMinMaxValues(min, max) {
         // XOR METHOD
         if (min > max) {
