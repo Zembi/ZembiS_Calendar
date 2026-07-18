@@ -386,22 +386,23 @@ class DOMManager {
         const activeMinute = config.time.handler.activeMinute;
         const isPM = activeHour >= 12;
 
-        // AM/PM ROW - BELOW THE WHEELS, ONLY FOR 12-HOUR MODE
-        if (config.time.use12Hour) {
-            const periodContainer = document.createElement('div');
-            periodContainer.className = `${ccn}_period_container`;
+        // AM/PM ROW - ABOVE THE WHEELS. ALWAYS BUILT, EVEN IN 24-HOUR MODE, SO THE WHEELS SIT AT THE SAME
+        // VERTICAL POSITION REGARDLESS OF use12Hour - OTHERWISE A 24-HOUR CALENDAR'S WHEELS WOULD SHIFT UP TO
+        // FILL THE SPACE WHERE THE AM/PM ROW WOULD OTHERWISE BE. JUST VISUALLY HIDDEN (visibility:hidden, NOT
+        // display:none, SO ITS SPACE STAYS RESERVED) WHEN use12Hour IS OFF.
+        const periodContainer = document.createElement('div');
+        periodContainer.className = `${ccn}_period_container${config.time.use12Hour ? '' : ` ${ccn}_period_container_hidden`}`;
 
-            ['AM', 'PM'].forEach((label) => {
-                const periodElement = document.createElement('span');
-                const isActivePeriod = (label === 'PM') === isPM;
-                periodElement.className = `${ccn}_period_choice${isActivePeriod ? ` ${ccn}_active_period` : ''}`;
-                periodElement.textContent = label;
-                periodElement.setAttribute('data-period', label);
-                periodContainer.appendChild(periodElement);
-            });
+        ['AM', 'PM'].forEach((label) => {
+            const periodElement = document.createElement('span');
+            const isActivePeriod = (label === 'PM') === isPM;
+            periodElement.className = `${ccn}_period_choice${isActivePeriod ? ` ${ccn}_active_period` : ''}`;
+            periodElement.textContent = label;
+            periodElement.setAttribute('data-period', label);
+            periodContainer.appendChild(periodElement);
+        });
 
-            timeContainer.appendChild(periodContainer);
-        }
+        timeContainer.appendChild(periodContainer);
 
         // HOURS WHEEL - 12 VALUES (12,1..11) FOR 12-HOUR MODE, OR 24 VALUES (0-23) FOR 24-HOUR MODE. 12-HOUR
         // CHIPS STORE THE DISPLAYED NUMERAL (data-hour12, 1-12), NOT A RESOLVED 24H VALUE - THE ACTUAL 24H VALUE
@@ -985,10 +986,19 @@ class DOMManager {
             `;
         }
 
-        const last_days = (7 - ((start_day + countDays) % 7)) % 7;
-
+        // ALWAYS FILLS OUT TO A FULL 6 ROWS (42 CELLS), NOT JUST TO THE END OF THE LAST PARTIAL WEEK - THE GRID
+        // HAS NO grid-template-rows, SO ITS HEIGHT IS PURELY "HOWEVER MANY ROWS OF CELLS EXIST", AND A GIVEN
+        // MONTH ONLY EVER NEEDS 4-6 ROWS DEPENDING ON ITS DAY COUNT/STARTING WEEKDAY - WITHOUT THIS, THE WHOLE
+        // CARD VISIBLY GREW/SHRANK NAVIGATING BETWEEN MONTHS. THIS TRAILING FILL IS RENDERED AS REAL, FADED
+        // NEXT-MONTH DAYS VIA forceShow=true, BYPASSING config.rules.displayNextMonth - A BLANK-CELL VERSION OF
+        // THIS WAS TRIED FIRST, BUT LEFT AN UGLY EMPTY GAP UNDER SHORTER MONTHS; SHOWING REAL DAYS (LIKE A
+        // TYPICAL MONTH-VIEW CALENDAR) FILLS THE SAME SPACE WITH SOMETHING MEANINGFUL INSTEAD. NOTE THIS MEANS
+        // displayNextMonth: false NO LONGER FULLY SUPPRESSES NEXT-MONTH DAYS - IT ONLY GOVERNED THE "COMPLETE THE
+        // LAST PARTIAL WEEK" PORTION BEFORE THIS CHANGE, AND FORCING JUST THAT PORTION WHILE LEAVING THE NEWLY-
+        // ADDED EXTRA ROWS BLANK WOULD'VE LOOKED INCONSISTENT (BLANK THEN REAL WITHIN THE SAME TRAILING RUN).
+        const trailingCellsNeeded = 42 - start_day - countDays;
         const next_month = new Date(year, month + 2, 0);
-        htmlForMonthBody += this.startDaysOfMonthFromCorrectWeekDay(config, last_days, { next_month });
+        htmlForMonthBody += this.startDaysOfMonthFromCorrectWeekDay(config, trailingCellsNeeded, { next_month }, true);
 
         return htmlForMonthBody;
     }
@@ -1039,7 +1049,12 @@ class DOMManager {
         return wrapTimeTrigger;
     }
 
-    startDaysOfMonthFromCorrectWeekDay(config, firstDayOfMonth, month_obj) {
+    // forceShow BYPASSES config.rules.displayNextMonth FOR THE TRAILING (next_month) BRANCH ONLY - USED BY
+    // buildMonthBodyHtml TO ALWAYS FILL THE GRID OUT TO A FULL 6 ROWS WITH REAL, FADED NEXT-MONTH DAYS RATHER
+    // THAN BLANK CELLS (SEE ITS OWN COMMENT), REGARDLESS OF WHETHER displayNextMonth ITSELF IS ON. THE LEADING
+    // (prev_month) BRANCH NEVER NEEDS THIS - THE LEADING CELL COUNT IS ALWAYS EXACTLY RIGHT TO ALIGN THE 1ST OF
+    // THE MONTH TO ITS WEEKDAY COLUMN, THERE'S NO EQUIVALENT "EXTRA LEADING ROW" CASE TO TOP UP.
+    startDaysOfMonthFromCorrectWeekDay(config, firstDayOfMonth, month_obj, forceShow = false) {
         let html = '';
         let custom_class = '';
         let count_days = -1;
@@ -1057,7 +1072,7 @@ class DOMManager {
             is_for_prev_month = true;
             c = firstDayOfMonth - 1;
         }
-        else if (config.rules.displayNextMonth && month_obj.next_month) {
+        else if ((config.rules.displayNextMonth || forceShow) && month_obj.next_month) {
             custom_class = ` ${this.controller.ccn}_next_month_day`;
             count_days = 0;
             month = month_obj.next_month.getMonth();

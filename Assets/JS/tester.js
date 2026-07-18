@@ -228,16 +228,6 @@ const dateId4 = calendarController.renderCalendar({
 });
 
 (function() {
-    // MANUAL TEST: disableCalendar/enableCalendar WITH LOADER - CALENDAR 4 USES behavior:'allowOpenNoAction',
-    // SO IT SHOULD STILL OPEN NORMALLY (SHOWING THE SPINNER + MESSAGE OVERLAY) WHILE DISABLED, WITH
-    // DAY/NAV/YEAR CLICKS BLOCKED UNTIL enableCalendar() RUNS 2S LATER
-    document.querySelector('.test-disable-toggle-4').addEventListener('click', () => {
-        calendarController.disableCalendar(dateId4.id);
-        setTimeout(() => {
-            calendarController.enableCalendar(dateId4.id);
-        }, 2000);
-    });
-
     // MANUAL TEST: setOpenCalendar - SHOULD JUMP WITHOUT A FULL REBUILD (TRY THIS WHILE CALENDAR 1 IS OPEN)
     document.querySelector('.test-jump-1').addEventListener('click', () => {
         calendarController.setOpenCalendar(dateId1.id, new Date(2024, 5, 1));
@@ -253,6 +243,16 @@ const dateId4 = calendarController.renderCalendar({
     // DOM/LISTENERS SHOULD BE GONE, AND ITS SELECT SHOULD BE RE-ATTACHABLE AFTERWARDS
     document.querySelector('.test-destroy-3').addEventListener('click', () => {
         dateId3.destroyCalendar();
+    });
+
+    // MANUAL TEST: disableCalendar/enableCalendar WITH LOADER - CALENDAR 4 USES behavior:'allowOpenNoAction',
+    // SO IT SHOULD STILL OPEN NORMALLY (SHOWING THE SPINNER + MESSAGE OVERLAY) WHILE DISABLED, WITH
+    // DAY/NAV/YEAR CLICKS BLOCKED UNTIL enableCalendar() RUNS 2S LATER
+    document.querySelector('.test-disable-toggle-4').addEventListener('click', () => {
+        calendarController.disableCalendar(dateId4.id);
+        setTimeout(() => {
+            calendarController.enableCalendar(dateId4.id);
+        }, 2000);
     });
 
 })();

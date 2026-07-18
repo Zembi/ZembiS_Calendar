@@ -778,6 +778,14 @@
     gap: var(--calendar-space-2);
 }
 
+/* 24-HOUR CALENDARS STILL BUILD THIS ROW (SEE DOMManager.createTimeChoices) SO THE WHEELS SIT AT THE SAME
+   VERTICAL POSITION AS A 12-HOUR CALENDAR'S - visibility:hidden (NOT display:none) KEEPS ITS SPACE RESERVED
+   WHILE HIDING/DISABLING THE (UNUSED) AM/PM CHIPS INSIDE IT */
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_period_container.calendar_vfz_period_container_hidden {
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_hour_choice,
 .input_calendar_vfz_outer_wrap .calendar_vfz_time_wrap .calendar_vfz_minute_choice {
     position: relative;
@@ -843,7 +851,17 @@
     z-index: 7;
     display: flex;
     justify-content: center;
-    margin-top: var(--calendar-space-2);
+    margin-top: var(--calendar-space-1);
+}
+
+/* UNLIKE THE GENERIC calendar_vfz_close_status RULE (opacity/visibility ONLY, SO ELEMENTS LIKE THE YEAR/MONTH/TIME
+   PANELS KEEP THEIR BOX FOR OPACITY/TRANSFORM FADE TRANSITIONS), THE TRIGGER'S "NO ACTIVE DATE YET" HIDDEN STATE
+   (SEE DOMManager.createTimeTriggerRow) SHOULD COLLAPSE OUT OF LAYOUT ENTIRELY - OTHERWISE ITS ROW (HEIGHT +
+   margin-top) STAYS RESERVED AS DEAD SPACE BELOW THE DAY-GRID UNTIL A DAY IS PICKED. THIS IS A ONE-TIME REVEAL,
+   NOT A REPEATEDLY-TOGGLED/ANIMATED PANEL, SO display:none HAS NO TRANSITION TO BREAK.
+   MORE SPECIFIC THAN THE GENERIC RULE, SO IT APPLIES ON TOP OF (NOT INSTEAD OF) IT. */
+.input_calendar_vfz_outer_wrap .calendar_vfz_time_trigger_wrap.calendar_vfz_close_status {
+    display: none;
 }
 
 /* THE TRIGGER SHOULD ONLY EVER SHOW IN THE ORDINARY DAY-GRID VIEW OR WHILE ITS OWN (time) POPUP IS OPEN - NOT

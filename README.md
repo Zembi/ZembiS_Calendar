@@ -59,7 +59,8 @@ myCalendar.disableCalendar();
 | `initDate` | boolean | `false` | If `true`, `openCalendar` is also selected/activated on first render. |
 | `extraLanguages` | object | `null` | Keyed by `<html lang="...">` value, e.g. `{ fr: { months, weekDays, today } }`. Only Greek (`el`) and English are built in. |
 | `dateFormat` | string | `'DD-MM-YYYY'` | One of `DD-MM-YYYY`, `MM-DD-YYYY`, `YYYY-MM-DD`, `YYYY-DD-MM`, and the same four with `YY` or `/` instead of `-`. |
-| `displayPreviousMonth` / `displayNextMonth` | boolean | `true` | Show faded leading/trailing days from adjacent months. |
+| `displayPreviousMonth` | boolean | `true` | Show faded leading days from the previous month. |
+| `displayNextMonth` | boolean | `true` | Reserved — the grid always fills its trailing side with faded next-month days regardless of this setting, so the card never grows or shrinks between months with a different number of weeks. |
 | `clickable` | boolean | `true` | Master switch — if `false`, nothing in the calendar is clickable. |
 | `cursorEffect` | boolean | `true` | Enables the cursor-follow highlight effect in the year picker. |
 | `navigation.activeArrows` | boolean | `true` | Show the prev/next month arrows. |
