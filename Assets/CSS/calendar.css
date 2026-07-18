@@ -737,6 +737,12 @@
     flex: 1 1 0;
     height: var(--calendar-time-wheel-height);
     overflow-y: scroll;
+    /* WITHOUT THIS, THE BROWSER'S DEFAULT touch-action:auto LEAVES IT FREE TO TREAT A NOT-PERFECTLY-VERTICAL DRAG
+       AS PARTLY HORIZONTAL TOO (ELASTIC OVERSCROLL/RUBBER-BANDING IN X ON SOME BROWSERS, E.G. iOS SAFARI), EVEN
+       THOUGH THERE'S NOTHING TO ACTUALLY SCROLL HORIZONTALLY HERE - THAT'S THE SIDEWAYS WOBBLE ON DRAG. SAME FIX
+       .calendar_vfz_month_body_viewport ALREADY USES FOR ITS OWN (HORIZONTAL) DRAG GESTURE, MIRRORED HERE FOR
+       THIS ELEMENT'S VERTICAL ONE. */
+    touch-action: pan-y;
     scroll-snap-type: y mandatory;
     /* CENTERS THE FIRST/LAST REAL VALUE - SEE createWheelColumn'S COMMENT FOR THE scrollTop = index * rowHeight
        MATH THIS PADDING MAKES POSSIBLE */
